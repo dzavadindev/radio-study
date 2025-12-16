@@ -33,8 +33,8 @@ void setup() {
   radio.setPayloadSize(sizeof(lights_state));
   radio.setChannel(20);
 
-  radio.openReadingPipe(1, DEV_ADDR == 0 ? address[1] : address[0]);
-  radio.openWritingPipe(DEV_ADDR == 0 ? address[0] : address[1]);
+  radio.openReadingPipe(1, address[1]);
+  radio.openWritingPipe(address[0]);
 
   radio.startListening();
 
@@ -71,8 +71,6 @@ void loop() {
     radio.read(&payload, bytes);
     Serial.println("Receiving a reading. . .");
 
-    if ((payload & 192) == 0) { return; }
-
     MCP.write8(payload);
   }
 
@@ -84,7 +82,7 @@ void loop() {
 }
 
 static void handle_button(bool pressed, uint32_t now, uint32_t* lastChange, bool* wasPressed, bool action) {
-  const uint32_t DEBOUNCE_MS = 100;
+  const uint32_t DEBOUNCE_MS = 30;
   if (pressed && !*wasPressed && (now - *lastChange) > DEBOUNCE_MS) {
     radio.stopListening();
 
