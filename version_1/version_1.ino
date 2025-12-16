@@ -6,7 +6,7 @@
 #define CSN_PIN 8
 #define MCP_nCS 10
 
-#define DEV_ADDR 1  // 0 - "thijs", 1 - "dan00"
+#define DEV_ADDR 0  // 0 - "thijs", 1 - "dan00"
 
 RF24 radio(CE_PIN, CSN_PIN);
 MCP23S08 MCP(MCP_nCS);
@@ -18,6 +18,8 @@ uint8_t lights_state = 0;
 void setup() {
   Serial.begin(115200);
   while (!Serial) {}
+
+  delay(2000);
 
   if (!radio.begin()) {
     Serial.println("Radio hardware is not responding!!");
