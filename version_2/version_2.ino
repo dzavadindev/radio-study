@@ -10,21 +10,21 @@ RF24 radio(CE_PIN, CSN_PIN);
 MCP23S08 MCP(MCP_CS_PIN);
 
 // Pick ONE per board:
-#define I_AM_THIJS 0  // Thijs board: 1, Dan board: 0
+#define I_AM_THIJS 1  // Thijs board: 1, Dan board: 0
 
 const uint8_t ADDR_THIJS[6] = "thijs";
-const uint8_t ADDR_DAN[6]   = "dan00";
+const uint8_t ADDR_DAN[6] = "dan00";
 
-const uint8_t* MY_ADDR    = I_AM_THIJS ? ADDR_THIJS : ADDR_DAN;
-const uint8_t* OTHER_ADDR = I_AM_THIJS ? ADDR_DAN   : ADDR_THIJS;
+const uint8_t* MY_ADDR = I_AM_THIJS ? ADDR_THIJS : ADDR_DAN;
+const uint8_t* OTHER_ADDR = I_AM_THIJS ? ADDR_DAN : ADDR_THIJS;
 
 // MCP mapping
 static const uint8_t NUM_LEDS = 6;  // MCP pins 0..5
-static const uint8_t BTN_INC  = 6;  // MCP pin 6
-static const uint8_t BTN_DEC  = 7;  // MCP pin 7
+static const uint8_t BTN_INC = 6;   // MCP pin 6
+static const uint8_t BTN_DEC = 7;   // MCP pin 7
 
 // If LEDs are active-low, swap these:
-static const uint8_t LED_ON_LEVEL  = 1;
+static const uint8_t LED_ON_LEVEL = 1;
 static const uint8_t LED_OFF_LEVEL = 0;
 
 static const unsigned long DEBOUNCE_MS = 30;
@@ -35,11 +35,9 @@ enum : uint8_t { CMD_SET = 0 };
 struct Msg {
   uint8_t sender;    // 0=Thijs, 1=Dan
   uint8_t seq;       // increments per send
-  uint8_t cmd;       // CMD_SET
   uint8_t ledCount;  // 0..NUM_LEDS (the full state)
 };
 
-uint8_t mySenderId = I_AM_THIJS ? 0 : 1;
 uint8_t mySeq = 0;
 uint8_t lastSeqFromOther = 255;
 
@@ -65,9 +63,8 @@ void applyLedCount() {
 
 bool sendState(uint8_t newCount) {
   Msg m;
-  m.sender   = mySenderId;
-  m.seq      = ++mySeq;
-  m.cmd      = CMD_SET;
+  m.sender = I_AM_THIJS;
+  m.seq = ++mySeq;
   m.ledCount = newCount;
 
   radio.stopListening();
@@ -90,14 +87,13 @@ void updateLocalAndBroadcast(int8_t delta) {
   if (next < 0) next = 0;
   if (next > NUM_LEDS) next = NUM_LEDS;
 
-  if ((uint8_t)next == ledCount) return; // no change
+  if ((uint8_t)next == ledCount) return;  // no change
   ledCount = (uint8_t)next;
 
   applyLedCount();
 
   // Send the full state. Optionally try a couple times if it fails.
   if (!sendState(ledCount)) {
-    // quick retry (RF24 already does auto-retry, this is extra safety)
     delay(5);
     sendState(ledCount);
   }
@@ -143,22 +139,21 @@ void handleReceive() {
     Msg m;
     radio.read(&m, sizeof(m));
 
-    if (m.sender == mySenderId) continue; // ignore own packets
+    if (m.sender == I_AM_THIJS) continue;  // ignore own packets
 
     // ignore duplicates / out-of-order older messages
     if (!isNewerSeq(m.seq, lastSeqFromOther)) continue;
     lastSeqFromOther = m.seq;
 
-    if (m.cmd == CMD_SET) {
-      if (m.ledCount > NUM_LEDS) m.ledCount = NUM_LEDS;
-      ledCount = m.ledCount;
-      applyLedCount();
 
-      Serial.print(F("RX SET ledCount="));
-      Serial.print(ledCount);
-      Serial.print(F(" seq="));
-      Serial.println(m.seq);
-    }
+    if (m.ledCount > NUM_LEDS) m.ledCount = NUM_LEDS;
+    ledCount = m.ledCount;
+    applyLedCount();
+
+    Serial.print(F("RX SET ledCount="));
+    Serial.print(ledCount);
+    Serial.print(F(" seq="));
+    Serial.println(m.seq);
   }
 }
 
