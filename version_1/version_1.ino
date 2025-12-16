@@ -6,6 +6,8 @@
 #define CSN_PIN 8
 #define MCP_nCS 10
 
+#define DEV_ADDR 1  // 0 - "thijs", 1 - "dan00"
+
 RF24 radio(CE_PIN, CSN_PIN);
 MCP23S08 MCP(MCP_nCS);
 
@@ -31,8 +33,8 @@ void setup() {
   radio.setPayloadSize(sizeof(lights_state));
   radio.setChannel(20);
 
-  radio.openReadingPipe(1, address[1]);
-  radio.openWritingPipe(address[0]);
+  radio.openReadingPipe(1, DEV_ADDR == 0 ? address[1] : address[0]);
+  radio.openWritingPipe(DEV_ADDR == 0 ? address[0] : address[1]);
 
   radio.startListening();
 
@@ -82,7 +84,7 @@ void loop() {
 }
 
 static void handle_button(bool pressed, uint32_t now, uint32_t* lastChange, bool* wasPressed, bool action) {
-  const uint32_t DEBOUNCE_MS = 50;
+  const uint32_t DEBOUNCE_MS = 100;
   if (pressed && !*wasPressed && (now - *lastChange) > DEBOUNCE_MS) {
     radio.stopListening();
 
@@ -92,8 +94,8 @@ static void handle_button(bool pressed, uint32_t now, uint32_t* lastChange, bool
       lights_state = (lights_state << 1) | 1;
     }
 
-    // radio.write(&lights_state, sizeof(lights_state));
-    MCP.write8(lights_state);
+    radio.write(&lights_state, sizeof(lights_state));
+    // MCP.write8(lights_state);
 
     radio.startListening();
     *lastChange = now;
