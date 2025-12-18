@@ -25,6 +25,8 @@ Max TX setting: 0 dBm ≈ 1 mW
 4) What is the wavelength in meters for the used NRF24 frequency band?
 
 ```
+λ=v/f
+λ= 3*10^8 m/s / 2.4 GHz ~ 0.12 m
 ```
 
 5) Which data rates does the radio support?
@@ -42,12 +44,19 @@ Max TX setting: 0 dBm ≈ 1 mW
 • Explain how this modulation technique works in your own words.
 
 ```
+It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using multiple different frequencies withing the band to transmit encoded data.
+
+The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the ISM band is 2.4GHz, the channel spread is 1 MHz across 126 channels (2.4GHz-2.525) and lastly the FSK happens within the channel range (2.4GHz-2.401GHz). In that case, the encoding may look like: 2.400GHz for 0 and 2.490GHz for 1, or even encode tuples and triplets of data within that channel. (i.e. 00 -> 2.400GHz, 01 -> 2.410GHz, 10 -> 2.420GHz, 11 -> 2.430GHz)
+
+"Gaussian" here means that the frequency at which the signals switch between the band frequencies is being smoothed by the Gaussian filter. This prevents sudden changes between frequencies at zero-time or infinite speed. Electrons don't move at infinite speed, even they are bound by physics, which means that forcing the electrons to move very hard, for a very short time, with extremely rapid changes in force will inavitebly cause fast oscillations. A pure square wave forces the electrons to move in many simultaneous rhythmic patterns.
+
 ```
 
 8) Power consumption in the idle mode states (power-down, standby-I and standby-II).
 • Explain in your own words what the different states do.
 
 ```
+
 ```
 
 9) Power consumption in the transmit state at the four different output levels.
