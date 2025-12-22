@@ -56,7 +56,14 @@ The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the
 • Explain in your own words what the different states do.
 
 ```
+Page 8 and 14.
+Consumes 26μA in Standby-I mode, 320μA in Standby-II mode and 900nA in power down mode.
 
+Power down mode has all register values maintaines but the SPI powered on. That means its possible to change configs and upload/download data from. It allows the module to hover "half-awake" or "basically off" while still maintaining registers intact. Tradeoff is the slowest bootup time out of all 3 modes - 1.5ms
+
+Standby-I is made to minimise average current consumption while maintaining short start up times. Besides everything that is active during "power down" (registers and SPI) the ocillator is also on during this mode. Usually used between packets when the radio is not transmitting or listening, or in low packet frequency communications. Slightly longer wake-up at 130μs
+
+In standby-II mode extra clock buffers are active and more current is used compared to standby-I mode. But that does mean that the radio wakes up instantly, as there is no PPL initialization time. In this mode anything written into the TX FIFO buffer will immediatelly be transmitted.
 ```
 
 9) Power consumption in the transmit state at the four different output levels.
@@ -67,6 +74,9 @@ The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the
 10) Power consumption in the receive mode state for the three different air data rates.
 
 ```
+Page 14, Table 4
+There are only three air data rates: 250 kbps, 1 Mbps and 2 Mbps.
+At 250kbps is 12.6mA, at 1Mbps its 13.1mA and at 2Mbps its 13.5mA
 ```
 
 11) What is Enhanced ShockBurst and what are the most important functions? Describe this in
@@ -80,6 +90,7 @@ your own words.
 
 
 ```
+ShockBurst allows for automatic packet assembly and timing, automatic acknowledgement and retransmissions of packets. That would mean that it operates on the 2 OSI Level - Data Link, as it deals with handling the packet transmissions.
 ```
 
 13) Look at the format of the radio packet (section 7.3 on page 28 of the datasheet) and describe
@@ -98,6 +109,24 @@ works in your own words. Give an example of a packet that is broken and describe
 radio is able to detect this.
 
 ```
+There are multiple parts of a packet validation.
+
+- The first is preamble - a byte long set of alternating 1 and 0. It's used to syncronise the demodulator with the transmit frequency. This gets rid of noise RF being picked up by the receiver.
+- Next one is addressing. Packets that have an address different from the receiving device primary RX address are autodiscarded.
+- Next is the PCF or Packet Control Filed. This contains the lenght of the subsequent payload, the packet unique ID, used for deduplication, and the NO_ACK flag. This one is important for validating broken payloads, as this covers 3 scenarios: payload too short/long, packet already received and an expected acknowledgement was not received. 
+- Last thing is the CRC, which is computed from the address, PCF and the payload itself. The closest thing to compare to is hashing. One of the simpliest CRC methods is an XOR checksum. If the CRC computed on the receiver side doesn't match the one received in the TX payload - packet is malformed.
+
+So, imagine a situation.
+We are transfeting this:
+
+[ Address: 0xE7 0xE7 0xE7 0xE7 0xE7 ][ PCF: length = 2 ][ Payload: 0x34 0x12 ][ CRC: 0xA9 0x3F ]
+
+Then during the transfer we encounter a interfering frequency - not a payload byte is flipped.
+
+[ Address: 0xE7 0xE7 0xE7 0xE7 0xE7 ][ PCF: length = 2 ][ Payload: 0x24 0x12 ][ CRC: 0xA9 0x3F ]
+
+So all the checks described before will pass until we get to the CRC. Because of a flipped bit the CRC is mismatched now and the packet is discarded.
+
 ```
 15) What conditions define a good address (see section 7.3.2 of the datasheet)? Give an example
 of a good 5-byte address that adheres to these conditions. Write the address in hexadecimal
@@ -110,6 +139,7 @@ and binary format.
 the address in hexadecimal and binary format.
 
 ```
+[0x00 0xFF 0xFF 0xFF 0xFF] is considered a bad address. Its considered such because the level only shifts ones, which means the address contains many duplicated hex values, which may be interpreted by the receiver hardware as plain noise.
 ```
 
 17) Add a table that describes the name and the function of every NRF24 pin. Include to which
@@ -123,6 +153,7 @@ do you think would happen If a classroom full of students would start using the 
 address?
 
 ```
+If all devices use the same address, every receiver will accept every packet and attempt to acknowledge it. This will lead to acknowledgement mess, where a single message is acknowledged more than once, or the acknowledgements cause collisions between each other. This will force the transmitter to retry, and cause the same thing to happen again. The channel will become a complete mess within seconds.
 ```
 
 19) Find in the datasheet what ‘ART’ stands for and explain this in your own words
