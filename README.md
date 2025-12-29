@@ -38,15 +38,14 @@ Max TX setting: 0 dBm ≈ 1 mW
 • What is the relationship between channels and frequencies?
 
 ```
+The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the ISM band is 2.4GHz, the channel spread is 1 MHz across 126 channels (2.4GHz-2.525) and lastly the FSK happens within the channel range (2.4GHz-2.401GHz)
 ```
 
 7) Which modulation technique does the radio use?
 • Explain how this modulation technique works in your own words.
 
 ```
-It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using multiple different frequencies withing the band to transmit encoded data.
-
-The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the ISM band is 2.4GHz, the channel spread is 1 MHz across 126 channels (2.4GHz-2.525) and lastly the FSK happens within the channel range (2.4GHz-2.401GHz). In that case, the encoding may look like: 2.400GHz for 0 and 2.490GHz for 1, or even encode tuples and triplets of data within that channel. (i.e. 00 -> 2.400GHz, 01 -> 2.410GHz, 10 -> 2.420GHz, 11 -> 2.430GHz)
+It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using multiple different frequencies withing the band to transmit encoded data. The encoding may look like: 2.401GHz for 0 and 2.410GHz for 1, or even encode tuples and triplets of data within that channel. (i.e. 00 -> 2.400GHz, 01 -> 2.405GHz, 10 -> 2.410GHz, 11 -> 2.415GHz)
 
 "Gaussian" here means that the frequency at which the signals switch between the band frequencies is being smoothed by the Gaussian filter. This prevents sudden changes between frequencies at zero-time or infinite speed. Electrons don't move at infinite speed, even they are bound by physics, which means that forcing the electrons to move very hard, for a very short time, with extremely rapid changes in force will inavitebly cause fast oscillations. A pure square wave forces the electrons to move in many simultaneous rhythmic patterns.
 
