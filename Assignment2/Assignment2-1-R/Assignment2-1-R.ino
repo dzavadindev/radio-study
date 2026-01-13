@@ -25,7 +25,7 @@ static bool seen[MAX_TRACK];
 
 enum PktType : uint8_t { PKT_CONFIG = 1, PKT_DATA = 2, PKT_END = 3 };
 
-struct __attribute__((packed)) ConfigPkt {
+struct ConfigPkt {
   uint8_t type; // PKT_CONFIG
   uint16_t testId;
   uint16_t packets; // how many data packets TX will send
@@ -36,14 +36,14 @@ struct __attribute__((packed)) ConfigPkt {
   uint8_t arc;      // 0..15
 };
 
-struct __attribute__((packed)) DataPkt {
+struct DataPkt {
   uint8_t type; // PKT_DATA
   uint16_t testId;
   uint16_t seq; // 0..packets-1
   uint32_t magic;
 };
 
-struct __attribute__((packed)) EndPkt {
+struct EndPkt {
   uint8_t type; // PKT_END
   uint16_t testId;
 };
