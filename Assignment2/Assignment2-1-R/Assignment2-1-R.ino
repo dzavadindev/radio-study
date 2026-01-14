@@ -1,209 +1,177 @@
-#include "RF24.h"
+#include <Arduino.h>
 #include <SPI.h>
+#include <RF24.h>
 
-// ---------- PINS ----------
-#define CE_PIN 9
-#define CSN_PIN 8
+#define CE_PIN D7
+#define CSN_PIN D8
 
 RF24 radio(CE_PIN, CSN_PIN);
 
-// ---------- ADDRESSES (must match TX) ----------
-const uint8_t ADDR_RX[6] = "rx001";
-const uint8_t ADDR_TX[6] = "tx001";
+static const uint8_t CTRL_ADDR[6] = "CTL01";
+static const uint8_t DATA_ADDR[6] = "DAT01";
 
-// ---------- CONTROL MODE (fixed) ----------
-// TX uses this to tell RX what test settings to switch to
-static const uint8_t CONTROL_CHANNEL = 2;
-static const rf24_datarate_e CONTROL_RATE = RF24_1MBPS;
-static const rf24_pa_dbm_e CONTROL_PA = RF24_PA_LOW;
-static const uint8_t CONTROL_ARD = 5;
-static const uint8_t CONTROL_ARC = 15;
+static constexpr uint32_t MAGIC = 0xC0FFEE42;
 
-// ---------- RX tracking ----------
-static const uint16_t MAX_TRACK = 1000; // sequences we can de-dup perfectly
-static bool seen[MAX_TRACK];
+static constexpr uint8_t CONTROL_CHANNEL = 2;
+static constexpr uint8_t CONTROL_ARD = 5;
+static constexpr uint8_t CONTROL_ARC = 15;
+static constexpr rf24_pa_dbm_e CONTROL_PA = RF24_PA_LOW;
+static constexpr rf24_datarate_e CONTROL_RATE = RF24_1MBPS;
 
-enum PktType : uint8_t { PKT_CONFIG = 1, PKT_DATA = 2, PKT_END = 3 };
-
-struct ConfigPkt {
-  uint8_t type; // PKT_CONFIG
-  uint16_t testId;
-  uint16_t packets; // how many data packets TX will send
-  uint8_t pa;       // rf24_pa_dbm_e
-  uint8_t rate;     // rf24_datarate_e
-  uint8_t channel;  // 0..125
-  uint8_t ard;      // 0..15
-  uint8_t arc;      // 0..15
+enum PktType : uint8_t {
+  PKT_CONFIG = 1,
+  PKT_PING = 2,
+  PKT_DATA = 3,
+  PKT_END = 4
 };
 
-struct DataPkt {
-  uint8_t type; // PKT_DATA
+// pragma pack tells the compiler align fields on 1-byte boundaries
+// this will prevent the radios sending garbled packets,
+// because the structs structure is stricter and will not be optimized away
+#pragma pack(push, 1)
+struct ConfigPkt {
+  uint8_t type;
   uint16_t testId;
-  uint16_t seq; // 0..packets-1
+  uint16_t packets;
+  uint8_t pa;
+  uint8_t rate;
+  uint8_t channel;
+  uint8_t ard;
+  uint8_t arc;
   uint32_t magic;
 };
-
-struct EndPkt {
-  uint8_t type; // PKT_END
+struct PingPkt {
+  uint8_t type;
   uint16_t testId;
+  uint32_t magic;
 };
+struct DataPkt {
+  uint8_t type;
+  uint16_t testId;
+  uint16_t seq;
+  uint32_t magic;
+};
+struct EndPkt {
+  uint8_t type;
+  uint16_t testId;
+  uint32_t magic;
+};
+#pragma pack(pop)
 
-static uint16_t expectedPackets = 0;
-static uint16_t uniqueReceived = 0;
-static uint16_t currentTestId = 0;
-static bool inTestMode = false;
+static bool inTest = false;  // Currently running the test for the config
+static uint16_t curTestId = 0;
+static uint16_t expected = 0;
+static uint16_t got = 0;
 
-static const char *paStr(uint8_t pa) {
-  switch (pa) {
-  case RF24_PA_MIN:
-    return "MIN";
-  case RF24_PA_LOW:
-    return "LOW";
-  case RF24_PA_HIGH:
-    return "HIGH";
-  case RF24_PA_MAX:
-    return "MAX";
-  default:
-    return "?";
-  }
-}
-static const char *rateStr(uint8_t r) {
-  switch (r) {
-  case RF24_250KBPS:
-    return "250K";
-  case RF24_1MBPS:
-    return "1M";
-  case RF24_2MBPS:
-    return "2M";
-  default:
-    return "?";
-  }
-}
-
-// Apply radio settings (and restart listening)
-static void applyRadio(uint8_t channel, rf24_datarate_e rate, rf24_pa_dbm_e pa,
-                       uint8_t ard, uint8_t arc) {
+static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8_t ard, uint8_t arc) {
   radio.stopListening();
-  radio.setChannel(channel);
+  radio.flush_rx();
+  radio.flush_tx();
+  radio.clearStatusFlags();
+
+  radio.setChannel(ch);
   radio.setDataRate(rate);
   radio.setPALevel(pa);
   radio.setRetries(ard, arc);
+
   radio.startListening();
 }
 
-static void enterControlMode() {
-  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD,
-             CONTROL_ARC);
-  inTestMode = false;
+// Sets the radio into Control Mode
+static void enterControl() {
+  inTest = false;
+  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD, CONTROL_ARC);
+  radio.openReadingPipe(1, CTRL_ADDR);
+  Serial.println("RX: CONTROL (waiting CONFIG)");
 }
 
-static void resetTracking(uint16_t testId, uint16_t packets) {
-  currentTestId = testId;
-  expectedPackets = packets;
-  uniqueReceived = 0;
+// Sets the radio params to the received params
+static void enterTestFromCfg(const ConfigPkt& c) {
+  inTest = true;
+  curTestId = c.testId;
+  expected = c.packets;
+  got = 0;
 
-  uint16_t n = (packets > MAX_TRACK) ? MAX_TRACK : packets;
-  for (uint16_t i = 0; i < n; i++)
-    seen[i] = false;
+  applyRadio(c.channel, (rf24_datarate_e)c.rate, (rf24_pa_dbm_e)c.pa, c.ard, c.arc);
+  radio.openReadingPipe(1, DATA_ADDR);
+
+  Serial.print("RX: TEST mode armed. testId=");
+  Serial.print(curTestId);
+  Serial.print(" expected=");
+  Serial.println(expected);
 }
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-  }
+  delay(2000);
 
   if (!radio.begin()) {
-    Serial.println(F("RF24 not responding"));
-    while (1) {
-    }
+    Serial.println("RX: radio.begin() FAILED");
+    while (1) {}
+  }
+  if (!radio.isChipConnected()) {
+    Serial.println("RX: nRF24 not connected (check wiring/power)");
+    while (1) {}
   }
 
+  radio.setAddressWidth(5);
+  radio.setCRCLength(RF24_CRC_16);
   radio.setAutoAck(true);
   radio.setPayloadSize(32);
-
-  // RX listens on ADDR_RX
-  radio.openReadingPipe(1, ADDR_RX);
-  // Writing pipe not required on RX for this test
   radio.startListening();
 
-  enterControlMode();
-  Serial.println(F("PER_RX ready (waiting CONFIG on control channel)"));
+  Serial.println("RX: started");
+  radio.printDetails();
+
+  enterControl();
 }
 
 void loop() {
   while (radio.available()) {
     uint8_t buf[32];
     radio.read(buf, sizeof(buf));
-    uint8_t type = buf[0];
 
-    if (type == PKT_CONFIG) {
-      ConfigPkt c;
+    const uint8_t type = buf[0];
+
+    // ---------- RECEIVING A CONFIGURATION
+    if (!inTest) {
+      if (type != PKT_CONFIG) continue;
+
+      ConfigPkt c{};
       memcpy(&c, buf, sizeof(c));
+      if (c.magic != MAGIC) {
+        Serial.println("RX: bad CONFIG magic");
+        continue;
+      }
 
-      Serial.print(F("\n[CONFIG] testId="));
-      Serial.print(c.testId);
-      Serial.print(F(" packets="));
-      Serial.print(c.packets);
-      Serial.print(F(" PA="));
-      Serial.print(paStr(c.pa));
-      Serial.print(F(" rate="));
-      Serial.print(rateStr(c.rate));
-      Serial.print(F(" ch="));
-      Serial.print(c.channel);
-      Serial.print(F(" ARD="));
-      Serial.print(c.ard);
-      Serial.print(F(" ARC="));
-      Serial.println(c.arc);
+      Serial.println("RX: got CONFIG (ACKed by hardware). Switching to TEST...");
+      enterTestFromCfg(c);
+      continue;
+    }
 
-      resetTracking(c.testId, c.packets);
-
-      // Switch to test settings to receive DATA stream
-      applyRadio(c.channel, (rf24_datarate_e)c.rate, (rf24_pa_dbm_e)c.pa, c.ard,
-                 c.arc);
-      inTestMode = true;
+    // --------- TESTING A CONFIGURATION
+    if (type == PKT_PING) {
+      PingPkt p{};
+      memcpy(&p, buf, sizeof(p));
+      if (p.magic == MAGIC && p.testId == curTestId) {
+        Serial.println("RX: got PING (test config confirmed)");
+      }
     } else if (type == PKT_DATA) {
-      if (!inTestMode)
-        continue;
-
-      DataPkt d;
+      DataPkt d{};
       memcpy(&d, buf, sizeof(d));
-      if (d.testId != currentTestId)
-        continue;
-
-      if (d.seq < MAX_TRACK) {
-        if (!seen[d.seq]) {
-          seen[d.seq] = true;
-          uniqueReceived++;
-        }
-      } else {
-        // beyond tracking range: still count, but can't perfectly de-dup
-        uniqueReceived++;
+      if (d.magic == MAGIC && d.testId == curTestId) {
+        got++;
       }
     } else if (type == PKT_END) {
-      if (!inTestMode)
-        continue;
-
-      EndPkt e;
+      EndPkt e{};
       memcpy(&e, buf, sizeof(e));
-      if (e.testId != currentTestId)
-        continue;
-
-      float per = 1.0f;
-      if (expectedPackets > 0)
-        per = 1.0f - ((float)uniqueReceived / (float)expectedPackets);
-
-      Serial.print(F("[END] testId="));
-      Serial.print(currentTestId);
-      Serial.print(F(" uniqueReceived="));
-      Serial.print(uniqueReceived);
-      Serial.print(F(" expected="));
-      Serial.print(expectedPackets);
-      Serial.print(F(" PER_RX="));
-      Serial.println(per, 6);
-
-      // back to control for next test
-      enterControlMode();
-      Serial.println(F("Back to control channel, waiting next CONFIG..."));
+      if (e.magic == MAGIC && e.testId == curTestId) {
+        Serial.print("RX: got END. got=");
+        Serial.print(got);
+        Serial.print(" expected=");
+        Serial.println(expected);
+        enterControl();
+      }
     }
   }
 }

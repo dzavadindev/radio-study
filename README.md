@@ -1,3 +1,46 @@
+# Documentation
+
+## Assignment 1 
+
+--- WIP ---
+
+## Assignment 2
+
+### Part 1 
+
+This part is about testing link reliability under different possible configurations. Those configuration options are:
+
+- Power Amplification (PA) - literal power of the signal
+- Datarate - how much data can the communication support, bps
+- Automatic Retry Delay - factor defining how much 250uS to wait between retires 
+- Automatic Retry Count - the maximum amount of retries before giving up
+- Channel - the communication channel inside the band
+
+The main principle of work for the app is:
+
+- TX selects a config (PA, Rate, ARD, ARC and Channel).
+- Then it sends a packet containing that config information to the RX over the Control Channel (a channel and config combo that is static for both RX and TX).
+- RX receives the config on the Control Channel and sends and auto-ACK.
+- Only after TX has received an ACK from RX will it initiate the tests for the config selected.
+- After END has been received by RX, it switches back to Control Channel to listen for more configuration packets.
+- Repeat for a few different configurations
+
+We have selected a few configurations, because testing all ~390,000 variants would not have been fun. Those configurations are:
+
+- Channels: 10–20 (or 3 bands: low/mid/high)
+- ARC: {0, 3, 7, 15}
+- ARD: {0, 2, 5, 15} (or 250us, 750us, 1500us, 4000us of delay)
+- PA: all 4
+- Rate: all 3
+
+That narrows it down to about 4000 variants to cover which is a bit more manageable.
+
+### Part 2
+
+--- WIP ---
+
+# Questions
+
 1) What is the maximum output power of the NRF24 module?
 How does that compare to the output power of a 3G/4G/5G mobile phone?
 
@@ -42,8 +85,7 @@ Overlap nRF24 - Bluetooth: 2402–2480 MHz  Basically all of Bluetooth overlaps.
 5) Which data rates does the radio support?
 
 ```
-it supports 250kbps, 1Mbps and 2Mbps on air data
-rates.
+it supports 250kbps, 1Mbps and 2Mbps on air data rates.
 
 ```
 
@@ -58,7 +100,7 @@ The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the
 • Explain how this modulation technique works in your own words.
 
 ```
-It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using multiple different frequencies withing the band to transmit encoded data. The encoding may look like: 2.401GHz for 0 and 2.410GHz for 1, or even encode tuples and triplets of data within that channel. (i.e. 00 -> 2.400GHz, 01 -> 2.405GHz, 10 -> 2.410GHz, 11 -> 2.415GHz)
+It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using multiple different frequencies withing the band to transmit encoded data. The encoding may look like: `fc − Δf` for 0 and `fc − Δf` for 1, where fc is the carrier frequency (channel) and delta f is the deviation factor. Its even possible to encode tuples and triplets of data within that channel, depending on the modulation scheme (3-FSK and 4-FSK). The one nRF24 uses is GFSK, which is a binary FSK implementation
 
 "Gaussian" here means that the frequency at which the signals switch between the band frequencies is being smoothed by the Gaussian filter. This prevents sudden changes between frequencies at zero-time or infinite speed. Electrons don't move at infinite speed, even they are bound by physics, which means that forcing the electrons to move very hard, for a very short time, with extremely rapid changes in force will inavitebly cause fast oscillations. A pure square wave forces the electrons to move in many simultaneous rhythmic patterns.
 

@@ -1,5 +1,0 @@
-default_fqbn: STMicroelectronics:stm32:Nucleo_64:pnum=NUCLEO_F303RE,upload_method=OpenOCDSTLink
-default_port: /dev/ttyACM0
-default_port_config:
-  baudrate: 115200
-default_protocol: serial
