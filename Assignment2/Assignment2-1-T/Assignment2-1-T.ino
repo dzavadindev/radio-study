@@ -25,6 +25,9 @@ enum PktType : uint8_t {
   PKT_END = 4
 };
 
+// pragma pack tells the compiler align fields on 1-byte boundaries
+// this will prevent the radios sending garbled packets,
+// because the structs structure is stricter and will not be optimized away
 #pragma pack(push, 1)
 struct ConfigPkt {
   uint8_t type;
@@ -66,6 +69,7 @@ static constexpr uint8_t TEST_ARC = 7;
 
 static constexpr uint16_t INTERVAL_MS = 5;
 
+// Set the radio config parameters
 static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8_t ard, uint8_t arc) {
   radio.stopListening();
   radio.flush_rx();
@@ -80,6 +84,7 @@ static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8
   delay(3);
 }
 
+// Helper to run N tests with M seconds delays
 static bool sendWithRetries(const void* p, uint8_t len, int tries, int delayMs) {
   for (int i = 0; i < tries; i++) {
     if (radio.write(p, len)) return true;

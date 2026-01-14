@@ -4,19 +4,19 @@
 
 #define CE_PIN D7
 #define CSN_PIN D8
+#define MAGIC 0xC0FFEE42;
 
 RF24 radio(CE_PIN, CSN_PIN);
 
 static const uint8_t CTRL_ADDR[6] = "CTL01";
 static const uint8_t DATA_ADDR[6] = "DAT01";
 
-static constexpr uint32_t MAGIC = 0xC0FFEE42;
-
-static constexpr uint8_t CONTROL_CHANNEL = 2;
-static constexpr uint8_t CONTROL_ARD = 5;
-static constexpr uint8_t CONTROL_ARC = 15;
-static constexpr rf24_pa_dbm_e CONTROL_PA = RF24_PA_LOW;
-static constexpr rf24_datarate_e CONTROL_RATE = RF24_1MBPS;
+// Control mode fixed
+#define CONTROL_CHANNEL 2
+#define CONTROL_RATE RF24_1MBPS
+#define CONTROL_PA RF24_PA_LOW
+#define CONTROL_ARD 5
+#define CONTROL_ARC 15
 
 enum PktType : uint8_t {
   PKT_CONFIG = 1,
