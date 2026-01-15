@@ -1,6 +1,6 @@
 #include <Arduino.h>
-#include <SPI.h>
 #include <RF24.h>
+#include <SPI.h>
 
 #define CE_PIN 7
 #define CSN_PIN 8
@@ -58,12 +58,13 @@ struct EndPkt {
 };
 #pragma pack(pop)
 
-static bool inTest = false;  // Currently running the test for the config
+static bool inTest = false; // Currently running the test for the config
 static uint16_t curTestId = 0;
 static uint16_t expected = 0;
 static uint16_t got = 0;
 
-static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8_t ard, uint8_t arc) {
+static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa,
+                       uint8_t ard, uint8_t arc) {
   radio.stopListening();
   radio.flush_rx();
   radio.flush_tx();
@@ -80,19 +81,21 @@ static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8
 // Sets the radio into Control Mode
 static void enterControl() {
   inTest = false;
-  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD, CONTROL_ARC);
+  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD,
+             CONTROL_ARC);
   radio.openReadingPipe(1, CTRL_ADDR);
   Serial.println("RX: CONTROL (waiting CONFIG)");
 }
 
 // Sets the radio params to the received params
-static void enterTestFromCfg(const ConfigPkt& c) {
+static void enterTestFromCfg(const ConfigPkt &c) {
   inTest = true;
   curTestId = c.testId;
   expected = c.packets;
   got = 0;
 
-  applyRadio(c.channel, (rf24_datarate_e)c.rate, (rf24_pa_dbm_e)c.pa, c.ard, c.arc);
+  applyRadio(c.channel, (rf24_datarate_e)c.rate, (rf24_pa_dbm_e)c.pa, c.ard,
+             c.arc);
   radio.openReadingPipe(1, DATA_ADDR);
 
   Serial.print("RX: TEST mode armed. testId=");
@@ -107,11 +110,13 @@ void setup() {
 
   if (!radio.begin()) {
     Serial.println("RX: radio.begin() FAILED");
-    while (1) {}
+    while (1) {
+    }
   }
   if (!radio.isChipConnected()) {
     Serial.println("RX: nRF24 not connected (check wiring/power)");
-    while (1) {}
+    while (1) {
+    }
   }
 
   radio.setAddressWidth(5);
@@ -135,7 +140,8 @@ void loop() {
 
     // ---------- RECEIVING A CONFIGURATION
     if (!inTest) {
-      if (type != PKT_CONFIG) continue;
+      if (type != PKT_CONFIG)
+        continue;
 
       ConfigPkt c{};
       memcpy(&c, buf, sizeof(c));
@@ -144,7 +150,8 @@ void loop() {
         continue;
       }
 
-      Serial.println("RX: got CONFIG (ACKed by hardware). Switching to TEST...");
+      Serial.println(
+          "RX: got CONFIG (ACKed by hardware). Switching to TEST...");
       enterTestFromCfg(c);
       continue;
     }
