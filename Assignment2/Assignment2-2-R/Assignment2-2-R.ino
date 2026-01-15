@@ -2,8 +2,8 @@
 #include <SPI.h>
 
 // ===== Pins (UNO/Nano): CE=9, CSN=10 =====
-#define CE_PIN 9
-#define CSN_PIN 10
+#define CE_PIN 7
+#define CSN_PIN 8
 RF24 radio(CE_PIN, CSN_PIN);
 
 // ===== Must match TX settings =====
@@ -24,7 +24,7 @@ struct Packet {
   uint32_t w[WORDS_PER_PACKET];
 };
 
-volatile uint32_t expected = 0; // next 32-bit number index expected (0..10000)
+volatile uint32_t expected = 0;  // next 32-bit number index expected (0..10000)
 
 void setup() {
   Serial.begin(115200);
@@ -65,7 +65,7 @@ void loop() {
   // If this is a reset/sync packet:
   if (p.w[0] == MAGIC) {
     expected = 0;
-    uint32_t ack = expected; // send "next expected"
+    uint32_t ack = expected;  // send "next expected"
     radio.writeAckPayload(1, &ack, sizeof(ack));
     Serial.println("Synced/reset expected=0");
     return;
@@ -86,6 +86,6 @@ void loop() {
     // Do not advance; TX will resend based on ack below
   }
 
-  uint32_t ack = expected; // tell TX what we want next
+  uint32_t ack = expected;  // tell TX what we want next
   radio.writeAckPayload(1, &ack, sizeof(ack));
 }

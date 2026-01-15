@@ -2,8 +2,8 @@
 #include <SPI.h>
 #include <RF24.h>
 
-#define CE_PIN D7
-#define CSN_PIN D8
+#define CE_PIN 7
+#define CSN_PIN 8
 #define MAGIC 0xC0FFEE42;
 
 RF24 radio(CE_PIN, CSN_PIN);
