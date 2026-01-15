@@ -1,70 +1,94 @@
+// ===============================
+// RX sketch (Receiver) with TIMEOUT fallback
+// - CONTROL mode listens on "CTL01" with fixed control settings
+// - On CONFIG -> switches to TEST mode on "DAT01"
+// - Counts DATA packets
+// - On END -> returns to CONTROL
+// - If END is missed: returns to CONTROL after TEST_TIMEOUT_MS with no valid packets
+// ===============================
+
 #include <Arduino.h>
 #include <RF24.h>
 #include <SPI.h>
 
 #define CE_PIN 7
 #define CSN_PIN 8
-#define MAGIC 0xC0FFEE42;
+#define MAGIC  0xC0FFEE42UL
 
 RF24 radio(CE_PIN, CSN_PIN);
 
 static const uint8_t CTRL_ADDR[6] = "CTL01";
 static const uint8_t DATA_ADDR[6] = "DAT01";
 
-// Control mode fixed
-#define CONTROL_CHANNEL 2
-#define CONTROL_RATE RF24_1MBPS
-#define CONTROL_PA RF24_PA_LOW
-#define CONTROL_ARD 5
-#define CONTROL_ARC 15
+// Control mode fixed (MUST match TX control)
+static const uint8_t         CONTROL_CHANNEL = 2;
+static const rf24_datarate_e CONTROL_RATE    = RF24_1MBPS;
+static const rf24_pa_dbm_e   CONTROL_PA      = RF24_PA_LOW;
+static const uint8_t         CONTROL_ARD     = 5;
+static const uint8_t         CONTROL_ARC     = 15;
 
-enum PktType : uint8_t {
-  PKT_CONFIG = 1,
-  PKT_PING = 2,
-  PKT_DATA = 3,
-  PKT_END = 4
-};
+// If RX is in TEST mode and sees no valid TEST packets for this long -> back to CONTROL
+static const uint32_t TEST_TIMEOUT_MS = 1500;
 
-// pragma pack tells the compiler align fields on 1-byte boundaries
-// this will prevent the radios sending garbled packets,
-// because the structs structure is stricter and will not be optimized away
+enum PktType : uint8_t { PKT_CONFIG=1, PKT_PING=2, PKT_DATA=3, PKT_END=4 };
+
 #pragma pack(push, 1)
 struct ConfigPkt {
-  uint8_t type;
+  uint8_t  type;
   uint16_t testId;
   uint16_t packets;
-  uint8_t pa;
-  uint8_t rate;
-  uint8_t channel;
-  uint8_t ard;
-  uint8_t arc;
+  uint8_t  paCode;    // 0=MIN,1=LOW,2=HIGH,3=MAX
+  uint8_t  rateCode;  // 0=250K,1=1M,2=2M
+  uint8_t  channel;
+  uint8_t  ard;
+  uint8_t  arc;
   uint32_t magic;
 };
 struct PingPkt {
-  uint8_t type;
+  uint8_t  type;
   uint16_t testId;
   uint32_t magic;
 };
 struct DataPkt {
-  uint8_t type;
+  uint8_t  type;
   uint16_t testId;
   uint16_t seq;
   uint32_t magic;
 };
 struct EndPkt {
-  uint8_t type;
+  uint8_t  type;
   uint16_t testId;
   uint32_t magic;
 };
 #pragma pack(pop)
 
-static bool inTest = false; // Currently running the test for the config
+// -------- state --------
+static bool     inTest = false;
 static uint16_t curTestId = 0;
-static uint16_t expected = 0;
-static uint16_t got = 0;
+static uint16_t expectedPackets = 0;
+static uint16_t gotPackets = 0;
+static uint32_t lastTestSeenMs = 0;
 
-static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa,
-                       uint8_t ard, uint8_t arc) {
+// -------- mapping helpers --------
+static rf24_datarate_e rateFromCode(uint8_t code) {
+  switch (code) {
+    case 0: return RF24_250KBPS;
+    case 1: return RF24_1MBPS;
+    case 2: return RF24_2MBPS;
+    default: return RF24_1MBPS;
+  }
+}
+static rf24_pa_dbm_e paFromCode(uint8_t code) {
+  switch (code) {
+    case 0: return RF24_PA_MIN;
+    case 1: return RF24_PA_LOW;
+    case 2: return RF24_PA_HIGH;
+    case 3: return RF24_PA_MAX;
+    default: return RF24_PA_LOW;
+  }
+}
+
+static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8_t ard, uint8_t arc) {
   radio.stopListening();
   radio.flush_rx();
   radio.flush_tx();
@@ -75,53 +99,49 @@ static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa,
   radio.setPALevel(pa);
   radio.setRetries(ard, arc);
 
+  delay(3);
   radio.startListening();
 }
 
-// Sets the radio into Control Mode
 static void enterControl() {
   inTest = false;
-  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD,
-             CONTROL_ARC);
+  applyRadio(CONTROL_CHANNEL, CONTROL_RATE, CONTROL_PA, CONTROL_ARD, CONTROL_ARC);
   radio.openReadingPipe(1, CTRL_ADDR);
   Serial.println("RX: CONTROL (waiting CONFIG)");
 }
 
-// Sets the radio params to the received params
-static void enterTestFromCfg(const ConfigPkt &c) {
+static void enterTestFromCfg(const ConfigPkt& c) {
   inTest = true;
   curTestId = c.testId;
-  expected = c.packets;
-  got = 0;
+  expectedPackets = c.packets;
+  gotPackets = 0;
+  lastTestSeenMs = millis();
 
-  applyRadio(c.channel, (rf24_datarate_e)c.rate, (rf24_pa_dbm_e)c.pa, c.ard,
-             c.arc);
+  applyRadio(c.channel, rateFromCode(c.rateCode), paFromCode(c.paCode), c.ard, c.arc);
   radio.openReadingPipe(1, DATA_ADDR);
 
-  Serial.print("RX: TEST mode armed. testId=");
+  Serial.print("RX: TEST mode. testId=");
   Serial.print(curTestId);
-  Serial.print(" expected=");
-  Serial.println(expected);
+  Serial.print(" expectedPackets=");
+  Serial.print(expectedPackets);
+  Serial.print(" ch=");
+  Serial.print(c.channel);
+  Serial.print(" rateCode=");
+  Serial.print(c.rateCode);
+  Serial.print(" paCode=");
+  Serial.println(c.paCode);
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(2000);
+  delay(1200);
 
-  if (!radio.begin()) {
-    Serial.println("RX: radio.begin() FAILED");
-    while (1) {
-    }
-  }
-  if (!radio.isChipConnected()) {
-    Serial.println("RX: nRF24 not connected (check wiring/power)");
-    while (1) {
-    }
-  }
+  if (!radio.begin()) { Serial.println("RX: begin FAILED"); while (1) {} }
 
   radio.setAddressWidth(5);
   radio.setCRCLength(RF24_CRC_16);
   radio.setAutoAck(true);
+  radio.disableDynamicPayloads();
   radio.setPayloadSize(32);
   radio.startListening();
 
@@ -132,53 +152,70 @@ void setup() {
 }
 
 void loop() {
+  // Timeout safety: if we're in TEST and haven't seen valid TEST packets, go back to CONTROL
+  if (inTest && (millis() - lastTestSeenMs > TEST_TIMEOUT_MS)) {
+    Serial.println("RX: TEST timeout -> back to CONTROL");
+    Serial.println("------------------");
+    enterControl();
+  }
+
   while (radio.available()) {
     uint8_t buf[32];
     radio.read(buf, sizeof(buf));
-
     const uint8_t type = buf[0];
 
-    // ---------- RECEIVING A CONFIGURATION
     if (!inTest) {
-      if (type != PKT_CONFIG)
-        continue;
+      if (type != PKT_CONFIG) continue;
 
       ConfigPkt c{};
       memcpy(&c, buf, sizeof(c));
-      if (c.magic != MAGIC) {
-        Serial.println("RX: bad CONFIG magic");
-        continue;
-      }
+      if (c.magic != MAGIC) { Serial.println("RX: bad CONFIG magic"); continue; }
 
-      Serial.println(
-          "RX: got CONFIG (ACKed by hardware). Switching to TEST...");
+      Serial.println("------------------");
+      Serial.print("RX: got CONFIG testId=");
+      Serial.print(c.testId);
+      Serial.println(" -> switching to TEST");
       enterTestFromCfg(c);
       continue;
     }
 
-    // --------- TESTING A CONFIGURATION
-    if (type == PKT_PING) {
-      PingPkt p{};
-      memcpy(&p, buf, sizeof(p));
-      if (p.magic == MAGIC && p.testId == curTestId) {
-        Serial.println("RX: got PING (test config confirmed)");
+    // in TEST mode:
+    switch (type) {
+      case PKT_PING: {
+        PingPkt p{};
+        memcpy(&p, buf, sizeof(p));
+        if (p.magic == MAGIC && p.testId == curTestId) {
+          lastTestSeenMs = millis();
+        }
+        break;
       }
-    } else if (type == PKT_DATA) {
-      DataPkt d{};
-      memcpy(&d, buf, sizeof(d));
-      if (d.magic == MAGIC && d.testId == curTestId) {
-        got++;
+
+      case PKT_DATA: {
+        DataPkt d{};
+        memcpy(&d, buf, sizeof(d));
+        if (d.magic == MAGIC && d.testId == curTestId) {
+          gotPackets++;
+          lastTestSeenMs = millis();
+        }
+        break;
       }
-    } else if (type == PKT_END) {
-      EndPkt e{};
-      memcpy(&e, buf, sizeof(e));
-      if (e.magic == MAGIC && e.testId == curTestId) {
-        Serial.print("RX: got END. got=");
-        Serial.print(got);
-        Serial.print(" expected=");
-        Serial.println(expected);
-        enterControl();
+
+      case PKT_END: {
+        EndPkt e{};
+        memcpy(&e, buf, sizeof(e));
+        if (e.magic == MAGIC && e.testId == curTestId) {
+          Serial.print("RX: got END. gotPackets=");
+          Serial.print(gotPackets);
+          Serial.print(" expectedPackets=");
+          Serial.println(expectedPackets);
+          Serial.println("------------------");
+          enterControl();
+        }
+        break;
       }
+
+      default:
+        break;
     }
   }
 }
