@@ -20,12 +20,11 @@ RF24 radio(CE_PIN, CSN_PIN);
 static const uint8_t CTRL_ADDR[6] = "CTL01";
 static const uint8_t DATA_ADDR[6] = "DAT01";
 
-// Control mode fixed (MUST match RX control)
-static const uint8_t CONTROL_CHANNEL = 2;
-static const rf24_datarate_e CONTROL_RATE = RF24_1MBPS;
-static const rf24_pa_dbm_e CONTROL_PA = RF24_PA_LOW;
-static const uint8_t CONTROL_ARD = 5;
-static const uint8_t CONTROL_ARC = 15;
+#define CONTROL_CHANNEL 2
+#define CONTROL_RATE RF24_1MBPS
+#define CONTROL_PA RF24_PA_LOW
+#define CONTROL_ARD 5
+#define CONTROL_ARC 15
 
 enum PktType : uint8_t {
   PKT_CONFIG = 1,
@@ -39,8 +38,8 @@ struct ConfigPkt {
   uint8_t type;
   uint16_t testId;
   uint16_t packets;
-  uint8_t paCode;   // 0=MIN,1=LOW,2=HIGH,3=MAX
-  uint8_t rateCode; // 0=250K,1=1M,2=2M
+  uint8_t paCode;    // 0=MIN,1=LOW,2=HIGH,3=MAX
+  uint8_t rateCode;  // 0=250K,1=1M,2=2M
   uint8_t channel;
   uint8_t ard;
   uint8_t arc;
@@ -78,6 +77,7 @@ static void applyControlRadio() {
   radio.setDataRate(CONTROL_RATE);
   radio.setPALevel(CONTROL_PA);
   radio.setRetries(CONTROL_ARD, CONTROL_ARC);
+
   delay(3);
 }
 
@@ -112,7 +112,7 @@ static bool waitForRxControlReady(uint32_t timeoutMs) {
   applyControlRadio();
   radio.openWritingPipe(CTRL_ADDR);
 
-  uint8_t probe[32] = {0};
+  uint8_t probe[32] = { 0 };
   probe[0] = 0x55;
 
   uint32_t t0 = millis();
