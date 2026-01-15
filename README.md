@@ -39,6 +39,8 @@ That narrows it down to about 4000 variants to cover which is a bit more managea
 
 --- WIP ---
 
+The fing chip bag in front of the nRF cut down the throughput by half
+
 # Questions
 
 1) What is the maximum output power of the NRF24 module?
