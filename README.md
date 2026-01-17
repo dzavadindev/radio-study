@@ -155,90 +155,28 @@ That narrows it down to about 4000 variants to cover which is a bit more managea
 ### Throughput (Part 2)
 
 #### Introduction
-The goal of this measurement is to determine the **actual end-to-end throughput** of the radio module in a realistic application scenario, and compare it with the **configured RF data rate** (250 kbps, 1 Mbps, and 2 Mbps). We transmit a fixed amount of data (**10,000 × 32-bit numbers = 320,000 bits**) from a transmitter to a receiver, verify that **all numbers are received**, and measure the total transfer time.
+The goal of this measurement is to determine the actual end-to-end throughput of the radio module in a realistic application scenario, and compare it with the configured RF data rate (250 kbps, 1 Mbps, and 2 Mbps). We transmit a fixed amount of data (10,000 × 32-bit numbers = 320,000 bits) from a transmitter to a receiver, verify that all numbers are received, and measure the total transfer time.
 
 #### Problem statement
-Even if a radio is configured for a certain physical-layer data rate (e.g., 1 Mbps), the **application throughput** is often much lower due to protocol overhead, acknowledgements, waiting time, and retransmissions.
+Even if a radio is configured for a certain physical-layer data rate (e.g., 1 Mbps), the application throughput is often much lower due to protocol overhead, acknowledgements, waiting time, and retransmissions.
 
 **Research question:**  
-How does the configured RF data rate (250 kbps / 1 Mbps / 2 Mbps) affect the **achieved application throughput** when transmitting 10,000 32-bit values reliably?
+How does the configured RF data rate (250 kbps / 1 Mbps / 2 Mbps) affect the achieved application throughput when transmitting 10,000 32-bit values reliably?
 
-### Methodology (Throughput measurement)
+### Methodology 
+We measured application-level throughput by reliably transmitting a fixed dataset from a transmitter (TX) to a receiver (RX), while keeping the test conditions the same so the experiment can be reproduced.
+- **Total payload:** 10,000 × 32 bits = 320,000 bits (40,000 bytes)  
+- **Timing window:** start when TX begins sending, stop when RX has received the final expected value  
+- **Throughput calculation:** `Throughput (bps) = 320,000 bits / time (s)`
 
-This section describes exactly how the throughput measurements were performed so the experiment can be reproduced.
+**Physical setup**
+TX and RX stayed in the same environment for each test. We dit not change the Distance and antenna orientation were kept the same for all data rates.
+- Note: **2.4 GHz interference** (Wi-Fi/Bluetooth) can affect retries and therefore throughput.
 
-#### Measurement goal and metric
-- **Goal:** measure the *application-level* throughput while transmitting **10,000 32-bit values** reliably from a transmitter (TX) to a receiver (RX).
-- **Total payload size:**  
-  - 10,000 values × 32 bits = **320,000 bits** (40,000 bytes)
-- **Measured time window:** from the moment the TX starts sending until the last value is successfully acknowledged (i.e., RX has received the full sequence).
-- **Throughput calculation:**  ```Throughput (bps) = 320,000 bits / time (s) ```
+**Variable under test**  
+In this experiment, the only parameter that was changed between runs was the **RF data rate**. The tests were repeated for **250 kbps**, **1 Mbps**, and **2 Mbps**, while keeping all other settings and the physical setup the same.
 
-#### Physical test setup
-- **Placement:** TX and RX were placed in the same environment during all tests to keep conditions comparable.
-- **Distance & orientation:** keep the same distance and antenna orientation for all data rates.  
-  *(Fill in your exact distance/orientation here, e.g., “~2 m apart, antennas vertical, line-of-sight, on a desk”.)*
-- **Environment:** interference in the 2.4 GHz band (Wi-Fi/Bluetooth) can affect results, so tests should be run in a consistent location.
-
-#### Software used
-- **Arduino IDE / Arduino CLI** to compile and upload:
-  - TX sketch: `Assignment2-2-T.ino`
-  - RX sketch: `Assignment2-2-R.ino`
-- **RF24 library** (SPI-based driver for nRF24)
-- **Serial Monitor (115200 baud)** to:
-  - view RX progress (prints received numbers)
-  - view final TX timing + throughput result
-
-#### Radio configuration (kept constant unless stated)
-Both TX and RX were configured with the same parameters (except that TX writes and RX listens):
-
-- **Address / Pipe:** `ADDR = "THR01"`  
-  - TX: `openWritingPipe(ADDR)`  
-  - RX: `openReadingPipe(1, ADDR)`
-- **RF channel:** `RF_CHANNEL = 76`  
-  - Rationale: fixed channel for repeatability. (Channel choice matters because of 2.4 GHz interference.)
-- **Output power:** `RF_PA = RF24_PA_LOW`  
-  - Rationale: reduces interference and keeps conditions stable at short range; also avoids saturating the receiver at very close distances.
-- **CRC:** `RF24_CRC_16`  
-  - Rationale: stronger error detection → fewer undetected corrupt packets.
-- **Auto-ACK:** `setAutoAck(true)`  
-  - Rationale: required so `radio.write()` returns success only when the receiver ACKs the packet.
-- **Retries:** `setRetries(RETRY_DELAY=5, RETRY_COUNT=15)`  
-  - Meaning: delay steps of 250 µs → 5 × 250 µs = **1250 µs** between retries, up to **15** retries per transmission attempt.
-  - Rationale: improves reliability in case of packet loss.
-- **Payload mode:** `disableDynamicPayloads()` and `setPayloadSize(sizeof(uint32_t))`  
-  - Fixed payload size of **4 bytes per packet** (one 32-bit number per radio packet).
-  - Rationale: simple and consistent for measurement, but it increases per-packet overhead.
-
-#### Variable under test (per experiment)
-Only the **RF data rate** was changed between experiments (and it must match on both TX and RX):
-- `RF24_250KBPS`
-- `RF24_1MBPS`
-- `RF24_2MBPS`
-
-All other parameters (channel, PA level, CRC length, retries, payload size, address, physical placement) were kept the same.
-
-#### Code behavior (how reliability is ensured)
-**Transmitter (TX) logic**
-- Starts a timer using `startMs = millis()`.
-- Sends values `i = 0 ... 9999` one by one:
-  - Each value is sent using `radio.write(&i, sizeof(i))`.
-  - If `radio.write()` returns `false`, the code retries in a `while (!radio.write(...))` loop until it succeeds.
-- Stops the timer at the end and prints:
-  - configured RF rate
-  - total time
-  - achieved throughput in bps and kbps
-
-**Receiver (RX) logic**
-- Keeps an `expected` counter starting at 0.
-- Reads incoming `uint32_t v`.
-- Only accepts the number if `v == expected`, then increments `expected`.
-  - This handles duplicates caused by retransmissions: duplicates are ignored automatically.
-- When `expected == 10000`, RX prints that all numbers were received and stops.
-
-This guarantees (in-order) reception of the full 10,000-value dataset, because TX does not advance to the next value until the current value is acknowledged.
-
-#### Measurement procedure (step-by-step)
+#### Measurement procedure
 For each RF data rate (250 kbps, 1 Mbps, 2 Mbps):
 1. Set `RF_RATE` to the desired value in **both** TX and RX sketches.
 2. Upload the RX sketch to the RX board and open Serial Monitor at **115200 baud**.
@@ -249,32 +187,8 @@ For each RF data rate (250 kbps, 1 Mbps, 2 Mbps):
    - “Time (s)” and “Achieved throughput (kbps)”
 7. Repeat for the next RF data rate while keeping all other conditions the same.
 
-#### Parameters that can influence the throughput results (and why)
-To interpret results correctly, the following factors can strongly affect measured throughput:
-
-- **Per-packet overhead:** each 32-bit value is sent as its own packet (4 bytes), so headers + ACK time dominate.
-- **Retransmissions:** interference, weak power supply, or poor placement increases retries → longer total time.
-- **Serial printing overhead:**
-  - RX prints every received number (`Serial.println(v)`), which can slow the loop and affect how fast RX can handle packets.
-  - TX prints `"Loading..."` during failures, which can further increase measured time if many failures occur.
-- **Power stability:** unstable 3.3V causes packet loss and inconsistent results.
-- **Channel interference (2.4 GHz Wi-Fi/Bluetooth):** changes in nearby wireless traffic can cause different PER and throughput.
-- **Distance/orientation:** signal strength affects error rate, especially at higher data rates.
-
-#### Parameters that can influence the throughput results (and why)
-To interpret results correctly, the following factors can strongly affect measured throughput:
-
-- **Per-packet overhead:** each 32-bit value is sent as its own packet (4 bytes), so headers + ACK time dominate.
-- **Retransmissions:** interference, weak power supply, or poor placement increases retries → longer total time.
-- **Serial printing overhead:**
-  - RX prints every received number (`Serial.println(v)`), which can slow the loop and affect how fast RX can handle packets.
-  - TX prints `"Loading..."` during failures, which can further increase measured time if many failures occur.
-- **Power stability:** unstable 3.3V causes packet loss and inconsistent results.
-- **Channel interference (2.4 GHz Wi-Fi/Bluetooth):** changes in nearby wireless traffic can cause different PER and throughput.
-- **Distance/orientation:** signal strength affects error rate, especially at higher data rates.
-
 #### Results
-The achieved throughput is **much lower** than the configured RF data rate in all tests, and the relationship is **not linear**.
+The achieved throughput is much lower than the configured RF data rate in all tests, and the relationship is not linear.
 
 | Configured RF rate | Time (s)   | Achieved throughput (bps) | Achieved throughput (kbps) |
 |---:|---:|---:|---:|
@@ -282,10 +196,10 @@ The achieved throughput is **much lower** than the configured RF data rate in al
 | 1 Mbps   | 138.257 | 2,314.53  | 2.31  |
 | 2 Mbps   | 5.742   | 55,729.71 | 55.73 |
 
-**Interpretation (no conclusions yet):**
-- Throughput is **orders of magnitude lower** than the configured RF rate, indicating the transfer is dominated by **overhead and waiting** rather than raw bit rate.
-- The **2 Mbps** configuration performs **much better** (≈55.7 kbps) than 250 kbps and 1 Mbps.
-- The **1 Mbps** test is even slower than 250 kbps, which suggests the system likely spent significant time on **retries/timeouts/ACK waiting**, or that fixed software delays dominated that run.
+**Interpretation:**
+- Throughput is orders of magnitude lower than the configured RF rate, indicating the transfer is dominated by overhead and waiting rather than raw bit rate.
+- The **2 Mbps** configuration performs much better (≈55.7 kbps) than 250 kbps and 1 Mbps.
+- The **1 Mbps** test is even slower than 250 kbps, which suggests the system likely spent significant time on retries/timeouts/ACK waiting, or that fixed software delays dominated that run.
 
 # Questions
 
