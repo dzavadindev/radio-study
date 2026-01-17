@@ -172,10 +172,7 @@ This section describes exactly how the throughput measurements were performed so
 - **Total payload size:**  
   - 10,000 values × 32 bits = **320,000 bits** (40,000 bytes)
 - **Measured time window:** from the moment the TX starts sending until the last value is successfully acknowledged (i.e., RX has received the full sequence).
-- **Throughput calculation:**  
-  \[
-  \text{Throughput (bps)} = \frac{320,000\ \text{bits}}{\text{time (s)}}
-  \]
+- **Throughput calculation:**  ```Throughput (bps) = 320,000 bits / time (s) ```
 
 #### Physical test setup
 - **Placement:** TX and RX were placed in the same environment during all tests to keep conditions comparable.
