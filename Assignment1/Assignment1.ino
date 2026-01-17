@@ -9,31 +9,23 @@
 RF24 radio(CE_PIN, CSN_PIN);
 MCP23S08 MCP(MCP_CS_PIN);
 
-// Pick ONE per board:
-#define I_AM_THIJS 0  // Thijs board: 1, Dan board: 0
+// Pick one for board:
+#define DEVICE_ADDR 0  // dev01 board: 0, dev02 board: 1
 
-const uint8_t ADDR_THIJS[6] = "thijs";
-const uint8_t ADDR_DAN[6] = "dan00";
+const uint8_t ADDR_FIRST[6] = "dev01";
+const uint8_t ADDR_SECOND[6] = "dev02";
 
-const uint8_t *MY_ADDR = I_AM_THIJS ? ADDR_THIJS : ADDR_DAN;
-const uint8_t *OTHER_ADDR = I_AM_THIJS ? ADDR_DAN : ADDR_THIJS;
+const uint8_t *MY_ADDR = DEVICE_ADDR ? ADDR_FIRST : ADDR_SECOND;
+const uint8_t *OTHER_ADDR = DEVICE_ADDR ? ADDR_SECOND : ADDR_FIRST;
 
-// MCP mapping
 static const uint8_t NUM_LEDS = 6;  // MCP pins 0..5
 static const uint8_t BTN_INC = 6;   // MCP pin 6
 static const uint8_t BTN_DEC = 7;   // MCP pin 7
 
-// If LEDs are active-low, swap these:
-static const uint8_t LED_ON_LEVEL = 1;
-static const uint8_t LED_OFF_LEVEL = 0;
-
 static const unsigned long DEBOUNCE_MS = 30;
 
-// We will broadcast FULL STATE each time (ledCount)
-enum : uint8_t { CMD_SET = 0 };
-
 struct Msg {
-  uint8_t sender;    // 0=Thijs, 1=Dan
+  uint8_t sender;    // 0=dev01, 1=dev02
   uint8_t seq;       // increments per send
   uint8_t ledCount;  // 0..NUM_LEDS (the full state)
 };
@@ -43,13 +35,13 @@ uint8_t lastSeqFromOther = 255;
 
 uint8_t ledCount = 0;
 
-// Debounce state (buttons are pulled up; pressed = LOW)
+// debounce state (buttons are pulled up; pressed = LOW)
 bool lastRawInc = true, stableInc = true;
 bool lastRawDec = true, stableDec = true;
 unsigned long lastChangeInc = 0;
 unsigned long lastChangeDec = 0;
 
-// Wrap-safe "newer seq" check (prevents accepting older out-of-order packets)
+// "newer seq" check (prevents accepting older out-of-order packets)
 static bool isNewerSeq(uint8_t s, uint8_t last) {
   if (s == last)
     return false;
@@ -58,31 +50,31 @@ static bool isNewerSeq(uint8_t s, uint8_t last) {
 
 void applyLedCount() {
   for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    MCP.write1(i, (i < ledCount) ? LED_ON_LEVEL : LED_OFF_LEVEL);
+    MCP.write1(i, (i < ledCount) ? 1 : 0);
   }
 }
 
-bool sendState(uint8_t newCount) {
+bool sendState(uint8_t newState) {
   Msg m;
-  m.sender = I_AM_THIJS;
+  m.sender = DEVICE_ADDR;
   m.seq = ++mySeq;
-  m.ledCount = newCount;
+  m.ledCount = newState;
 
   radio.stopListening();
   bool ok = radio.write(&m, sizeof(m));
   radio.startListening();
 
-  Serial.print(F("TX SET ledCount="));
+  Serial.print("TX SET ledCount=");
   Serial.print(m.ledCount);
-  Serial.print(F(" seq="));
+  Serial.print(" seq=");
   Serial.print(m.seq);
-  Serial.print(F(" -> "));
-  Serial.println(ok ? F("OK") : F("FAIL"));
+  Serial.print(" -> ");
+  Serial.println(ok ? "OK" : "FAIL");
 
   return ok;
 }
 
-// Update local state FIRST, then broadcast full state
+// update local state FIRST, then broadcast full state
 void updateLocalAndBroadcast(int8_t delta) {
   int16_t next = (int16_t)ledCount + (int16_t)delta;
   if (next < 0)
@@ -91,12 +83,12 @@ void updateLocalAndBroadcast(int8_t delta) {
     next = NUM_LEDS;
 
   if ((uint8_t)next == ledCount)
-    return;  // no change
+    return;
   ledCount = (uint8_t)next;
 
   applyLedCount();
 
-  // Send the full state. Optionally try a couple times if it fails.
+  // Send the full state
   if (!sendState(ledCount)) {
     delay(5);
     sendState(ledCount);
@@ -106,7 +98,8 @@ void updateLocalAndBroadcast(int8_t delta) {
 void handleButtonsAndSend() {
   unsigned long now = millis();
 
-  bool rawInc = (MCP.read1(BTN_INC) != 0);  // HIGH=not pressed, LOW=pressed
+  // HIGH=not pressed, LOW=pressed
+  bool rawInc = (MCP.read1(BTN_INC) != 0);
   bool rawDec = (MCP.read1(BTN_DEC) != 0);
 
   // INC debounce
@@ -114,12 +107,13 @@ void handleButtonsAndSend() {
     lastRawInc = rawInc;
     lastChangeInc = now;
   }
+
   if ((now - lastChangeInc) >= DEBOUNCE_MS && rawInc != stableInc) {
     bool prev = stableInc;
     stableInc = rawInc;
+
     if (prev == true && stableInc == false) {
-      // pressed
-      updateLocalAndBroadcast(+1);
+      updateLocalAndBroadcast(1);
     }
   }
 
@@ -128,11 +122,12 @@ void handleButtonsAndSend() {
     lastRawDec = rawDec;
     lastChangeDec = now;
   }
+
   if ((now - lastChangeDec) >= DEBOUNCE_MS && rawDec != stableDec) {
     bool prev = stableDec;
     stableDec = rawDec;
+
     if (prev == true && stableDec == false) {
-      // pressed
       updateLocalAndBroadcast(-1);
     }
   }
@@ -143,8 +138,9 @@ void handleReceive() {
     Msg m;
     radio.read(&m, sizeof(m));
 
-    if (m.sender == I_AM_THIJS)
-      continue;  // ignore own packets
+    // probably a useless guard, but better be safe
+    if (m.sender == DEVICE_ADDR)
+      continue;
 
     // ignore duplicates / out-of-order older messages
     if (!isNewerSeq(m.seq, lastSeqFromOther))
@@ -165,10 +161,9 @@ void handleReceive() {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-  }
+  delay(2000);
 
-  // De-select chip selects before SPI
+  // deactivate CS before SPI
   pinMode(CSN_PIN, OUTPUT);
   digitalWrite(CSN_PIN, HIGH);
   pinMode(MCP_CS_PIN, OUTPUT);
@@ -176,7 +171,7 @@ void setup() {
 
   SPI.begin();
 
-  // Radio init FIRST
+  // radio init
   if (!radio.begin()) {
     Serial.println(F("radio hardware is not responding!!"));
     while (1) {
@@ -210,10 +205,10 @@ void setup() {
   stableDec = lastRawDec = (MCP.read1(BTN_DEC) != 0);
   lastChangeInc = lastChangeDec = millis();
 
-  Serial.print(F("I am "));
-  Serial.println(I_AM_THIJS ? F("thijs") : F("dan00"));
+  Serial.print("I am ");
+  Serial.println(DEVICE_ADDR ? "dev01" : "dev02");
 
-  // Optional: broadcast initial state once so the other side snaps to it
+  // broadcast initial state once so the other side snaps to it, if it's already running
   sendState(ledCount);
 }
 
