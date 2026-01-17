@@ -124,6 +124,31 @@ This is basically the “other side changed state; mirror it here” path. The s
 
 ### Part 1 
 
+#### Introduction
+
+The goal of this work is to evaluate the reliability of an nRF24L01 radio link by measuring Packet Error Rate (PER) while systematically varying key PHY/MAC parameters:
+
+* Transmit power (PA level)
+* Frequency channel
+* Data rate
+* Auto Retransmit (ART) parameters (retransmit delay ARD and retransmit count ARC)
+
+To do this, we have implemented a repeatable measurement setup using two STM32 Nucleo boards and the RF24 radio module. One board acts as the transmitter (TX) and drives the experiments; the other board acts as the receiver (RX) and follows the experiment configuration.
+
+#### Problem statement
+
+Wireless reliability of radios depends heavily on configuration and environment. For embedded use-cases that rely on the nRF24L01, it is important to understand how configuration choices affect delivery reliability.
+
+Research questions
+
+* RQ1. How does data rate influence PER under the same physical conditions?
+* RQ2. How does transmit power (PA level) influence PER and retry behavior?
+* RQ3. How do ART settings (ARD, ARC) influence PER and the average number of retries?
+* RQ4. How does frequency channel influence PER (e.g., due to interference in the 2.4 GHz band)?
+* RQ5. Is there a configuration that provides the best tradeoff between reliability (low PER) and latency/throughput (low retries / lower delays)?
+
+#### Methodology
+
 This part is about testing link reliability under different possible configurations. Those configuration options are:
 
 - Power Amplification (PA) - literal power of the signal

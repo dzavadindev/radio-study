@@ -30,7 +30,6 @@ static const RadioConfig PRESETS[] = {
 size_t rf24cfg_count() { return sizeof(PRESETS) / sizeof(PRESETS[0]); }
 
 const RadioConfig &rf24cfg_get(size_t idx) {
-  // no bounds check for speed; do your own check in calling code
   return PRESETS[idx];
 }
 
