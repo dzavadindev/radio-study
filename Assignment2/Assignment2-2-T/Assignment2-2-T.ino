@@ -15,7 +15,7 @@
 #include <RF24.h>
 #include <SPI.h>
 
-#define CE_PIN 7
+#define CE_PIN 9
 #define CSN_PIN 8
 
 RF24 radio(CE_PIN, CSN_PIN);
@@ -75,8 +75,10 @@ void loop() {
     // Keep sending i until it is ACKed
     while (!radio.write(&i, sizeof(i))) {
       // auto-retry inside radio also happens; this loop retries again if it still failed
-    Serial.println("Loading . . .");
+      Serial.println("Loading . . . ");
     }
+    Serial.print("Count: ");
+    Serial.println(i);
   }
 
   uint32_t endMs = millis();

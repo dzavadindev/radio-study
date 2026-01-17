@@ -2,7 +2,7 @@
 #include <SPI.h>
 
 // ===== Pins =====
-#define CE_PIN 7
+#define CE_PIN 9
 #define CSN_PIN 8
 
 RF24 radio(CE_PIN, CSN_PIN);
