@@ -2,7 +2,123 @@
 
 ## Assignment 1 
 
---- WIP ---
+### Communication between the two boards
+
+This firmware is meant to run on two identical boards.
+The boards are configured as **dev01** and **dev02** using `DEVICE_ADDR` (0/1).
+
+Each board does the same things:
+
+**Maintain a single shared state:** `ledCount` (0..6), meaning “how many LEDs are lit”.
+
+**Local button press updates the state first**, then the board **broadcasts the full state** to the other board via the radio.
+
+* BTN_INC increments `ledCount`
+* BTN_DEC decrements `ledCount`
+* Debounce is handled in software (30 ms) because the MCP inputs are pulled up.
+
+**Receive updates from the other board** and apply them.
+
+When a valid packet arrives, the receiver updates its own `ledCount` and drives LEDs accordingly.
+Duplicate or out-of-order packets are ignored using a **sequence number** comparison with wrap-around safety.
+
+#### Radio roles
+
+Each board is configured with:
+
+* one **writing pipe** aimed at the other board’s address
+* one **reading pipe** listening on its own address
+
+So it’s **bidirectional**, but what we do is:
+
+* send update → switch to TX briefly → send → return to RX listening mode
+* the boards are always listening for incoming updates in the background
+
+#### Reliability strategy
+
+We are making use of auto-retries and acknowledgements to improve delivery probability. On a local button press, it sends the full state once, and if it fails it retries once more after a short delay. On the receiver side, old/duplicate packets are filtered using `seq` ordering, so resends don’t cause flicker or reverse state.
+
+---
+
+### Package format
+
+The radio payload is a fixed-size struct:
+
+```cpp
+struct Msg {
+  uint8_t sender;
+  uint8_t seq;
+  uint8_t ledCount;
+};
+```
+
+### Field meanings
+
+**sender**
+
+  * Identifies which device sent the message.
+  * Used as a safety check so a device ignores its own packets.
+
+**seq**
+
+  * Both boards increase sequence number for every received message.
+  * Used to filter duplicates/out-of-order messages.
+  * Wrap-around is handled: the code treats a sequence as “newer” if `(s - last) < 128`.
+
+**ledCount**
+
+  * Number of LEDs that are turned on.
+  * If a packet is lost, the next successful packet still contains the full state and resynchronizes both devices.
+
+### Payload size
+
+Payload size is fixed with `radio.setPayloadSize(sizeof(Msg))`, and its 24 bits.
+
+---
+
+## Code brief
+
+### Helpers 
+
+####  (`sendState(uint8_t newState)`)
+
+Packages up the current state into a `Msg` and transmits it to the other board. Before sending, it:
+
+* stamps the message with our `sender` id (`DEVICE_ADDR`)
+* increments our `seq` counter (so the other side can deduplicate)
+* puts the full `ledCount` value into the payload
+
+It temporarily stops listening because the RF24 can’t be in RX and TX at the same time. After the send attempt it immediately goes back to listening, so we don’t miss incoming updates.
+
+#### `updateLocalAndBroadcast(int8_t delta)`
+
+This is the “button press effect” function. It applies `delta` (+1 or -1) to `ledCount`, clamps the result to the valid range (0..`NUM_LEDS`), and returns early if the value didn’t actually change (e.g., you try to decrement at 0).
+
+**WE ACTUALLY NEED TO ONLY UPDATE WHEN WE GET ACK**
+It updates the local LEDs first (so the board feels responsive), and only then broadcasts the full state. The payload is the full `ledCount`, not “+1/-1”, so even if packets are lost, the next successful packet will resynchronize the other board.
+
+If the first send fails, it waits a few milliseconds and tries once more. That’s not a full resend queue, but it’s enough to smooth out occasional transient failures.
+
+### Button presses and actual radio calls (`handleButtonsAndSend()`)
+
+Polls the two button inputs from the MCP23S08 and implements debouncing for each button separately.
+
+The buttons are pulled up, so “not pressed” reads HIGH and “pressed” reads LOW. We also debounce the button press here.
+
+A button press is detected on the falling edge, when stable state goes from HIGH to LOW. When that happens, it calls `updateLocalAndBroadcast(1)` for INC or `updateLocalAndBroadcast(-1)` for DEC.
+
+### Receiving new state `handleReceive()`
+
+Processes any queued incoming packets. Each packet is read into a `Msg` struct and validated lightly.
+
+It ignores:
+
+* packets that claim they were sent by us (`m.sender == DEVICE_ADDR`)
+* packets that are duplicates or older than what we already applied, based on `seq`
+
+If a packet passes those checks, it treats the packet’s `ledCount` as valid, clamps it to `NUM_LEDS` for safety, applies it locally via `applyLedCount()`.
+
+This is basically the “other side changed state; mirror it here” path. The seq-based filter is what prevents flicker or reverting when retries/out-of-order deliveries happen.
 
 ## Assignment 2
 
