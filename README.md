@@ -197,72 +197,16 @@ We measured application-level throughput by reliably transmitting a fixed datase
 - **Timing window:** start when TX begins sending, stop when RX has received the final expected value  
 - **Throughput calculation:** `Throughput (bps) = 320,000 bits / time (s)`
 
-**Physical setup**
+**Physical setup **
 TX and RX stayed in the same environment for each test. We dit not change the Distance and antenna orientation were kept the same for all data rates.
 - Note: **2.4 GHz interference** (Wi-Fi/Bluetooth) can affect retries and therefore throughput.
 
 **Variable under test**  
-In this experiment, the only parameter that was changed between runs was the **RF data rate**. The tests were repeated for **250 kbps**, **1 Mbps**, and **2 Mbps**, while keeping all other settings and the physical setup the same.
-
-#### Physical test setup
-- **Placement:** TX and RX were placed in the same environment during all tests to keep conditions comparable.
-- **Distance & orientation:** keep the same distance and antenna orientation for all data rates.  
-  *(Fill in your exact distance/orientation here, e.g., “~2 m apart, antennas vertical, line-of-sight, on a desk”.)*
-- **Environment:** interference in the 2.4 GHz band (Wi-Fi/Bluetooth) can affect results, so tests should be run in a consistent location.
-
-#### Radio configuration
-Both TX and RX were configured with the same parameters (except that TX writes and RX listens):
-
-- **Address / Pipe:** `ADDR = "THR01"`  
-  - TX: `openWritingPipe(ADDR)`  
-  - RX: `openReadingPipe(1, ADDR)`
-- **RF channel:** `RF_CHANNEL = 76`  
-  - Rationale: fixed channel for repeatability. (Channel choice matters because of 2.4 GHz interference.)
-- **Output power:** `RF_PA = RF24_PA_LOW`  
-  - Rationale: reduces interference and keeps conditions stable at short range; also avoids saturating the receiver at very close distances.
-- **CRC:** `RF24_CRC_16`  
-  - Rationale: stronger error detection → fewer undetected corrupt packets.
-- **Auto-ACK:** `setAutoAck(true)`  
-  - Rationale: required so `radio.write()` returns success only when the receiver ACKs the packet.
-- **Retries:** `setRetries(RETRY_DELAY=5, RETRY_COUNT=15)`  
-  - Meaning: delay steps of 250 µs → 5 × 250 µs = **1250 µs** between retries, up to **15** retries per transmission attempt.
-  - Rationale: improves reliability in case of packet loss.
-- **Payload mode:** `disableDynamicPayloads()` and `setPayloadSize(sizeof(uint32_t))`  
-  - Fixed payload size of **4 bytes per packet** (one 32-bit number per radio packet).
-  - Rationale: simple and consistent for measurement, but it increases per-packet overhead.
-
-#### Variable under test
-Only the **RF data rate** was changed between experiments (and it must match on both TX and RX):
-- `RF24_250KBPS`
-- `RF24_1MBPS`
-- `RF24_2MBPS`
-
-All other parameters (channel, PA level, CRC length, retries, payload size, address, physical placement) were kept the same.
-
-#### Code behavior
-**Transmitter (TX) logic**
-- Starts a timer using `startMs = millis()`.
-- Sends values `i = 0 ... 9999` one by one:
-  - Each value is sent using `radio.write(&i, sizeof(i))`.
-  - If `radio.write()` returns `false`, the code retries in a `while (!radio.write(...))` loop until it succeeds.
-- Stops the timer at the end and prints:
-  - configured RF rate
-  - total time
-  - achieved throughput in bps and kbps
-
-**Receiver (RX) logic**
-- Keeps an `expected` counter starting at 0.
-- Reads incoming `uint32_t v`.
-- Only accepts the number if `v == expected`, then increments `expected`.
-  - This handles duplicates caused by retransmissions: duplicates are ignored automatically.
-- When `expected == 10000`, RX prints that all numbers were received and stops.
-
-This guarantees (in-order) reception of the full 10,000-value dataset, because TX does not advance to the next value until the current value is acknowledged.
+In this experiment, the only parameter that was changed between runs was the RF data rate. The tests were repeated for **250 kbps**, **1 Mbps**, and **2 Mbps**, while keeping all other settings and the physical setup the same.
 
 #### Measurement procedure
-
 For each RF data rate (250 kbps, 1 Mbps, 2 Mbps):
-1. Set `RF_RATE` to the desired value in **both** TX and RX sketches.
+1. Set `RF_RATE` to the desired value in both TX and RX sketches.
 2. Upload the RX sketch to the RX board and open Serial Monitor at **115200 baud**.
 3. Upload the TX sketch to the TX board and open Serial Monitor at **115200 baud**.
 4. Reset both boards (or power cycle) to start a clean run.
