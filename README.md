@@ -122,7 +122,7 @@ This is basically the “other side changed state; mirror it here” path. The s
 
 ## Assignment 2
 
-### Part 1 
+### Packet Error Rate (Part 1)
 
 #### Introduction
 
@@ -139,7 +139,7 @@ To do this, we have implemented a repeatable measurement setup using two STM32 N
 
 Wireless reliability of radios depends heavily on configuration and environment. For embedded use-cases that rely on the nRF24L01, it is important to understand how configuration choices affect delivery reliability.
 
-Research questions
+Research questions:
 
 * RQ1. How does data rate influence PER under the same physical conditions?
 * RQ2. How does transmit power (PA level) influence PER and retry behavior?
@@ -166,16 +166,19 @@ The main principle of work for the app is:
 - After END has been received by RX, it switches back to Control Channel to listen for more configuration packets.
 - Repeat for a few different configurations
 
-We have selected a few configurations, because testing all ~390,000 variants would not have been fun. Those configurations are:
+We have selected a few configurations, because testing all ~390,000 variants would not have been fun. We have a baseline configuration we are going to modify to test for different configuration values. That default config is:
 
-- Channels: 10–20 (or 3 bands: low/mid/high)
-- ARC: {0, 3, 7, 15}
-- ARD: {0, 2, 5, 15} (or 250us, 750us, 1500us, 4000us of delay)
-- PA: all 4
-- Rate: all 3
+- PA - Low
+- Datarate - 1Mbsp
+- ARD - 5
+- ARC - 5
+- Channel - 76
 
-That narrows it down to about 4000 variants to cover which is a bit more manageable.
+From there, we are going to vary a single value inside of the config (e.g., check all 3 PA types, check multiple different channels, check all 3 datarates etc.) and record the PER results. During the experiments both the devices will stay within one meter of one another with a clear line of sight.
 
+#### Results
+
+#### Conclusion
 
 ### Throughput (Part 2)
 
@@ -201,7 +204,63 @@ TX and RX stayed in the same environment for each test. We dit not change the Di
 **Variable under test**  
 In this experiment, the only parameter that was changed between runs was the **RF data rate**. The tests were repeated for **250 kbps**, **1 Mbps**, and **2 Mbps**, while keeping all other settings and the physical setup the same.
 
+#### Physical test setup
+- **Placement:** TX and RX were placed in the same environment during all tests to keep conditions comparable.
+- **Distance & orientation:** keep the same distance and antenna orientation for all data rates.  
+  *(Fill in your exact distance/orientation here, e.g., “~2 m apart, antennas vertical, line-of-sight, on a desk”.)*
+- **Environment:** interference in the 2.4 GHz band (Wi-Fi/Bluetooth) can affect results, so tests should be run in a consistent location.
+
+#### Radio configuration
+Both TX and RX were configured with the same parameters (except that TX writes and RX listens):
+
+- **Address / Pipe:** `ADDR = "THR01"`  
+  - TX: `openWritingPipe(ADDR)`  
+  - RX: `openReadingPipe(1, ADDR)`
+- **RF channel:** `RF_CHANNEL = 76`  
+  - Rationale: fixed channel for repeatability. (Channel choice matters because of 2.4 GHz interference.)
+- **Output power:** `RF_PA = RF24_PA_LOW`  
+  - Rationale: reduces interference and keeps conditions stable at short range; also avoids saturating the receiver at very close distances.
+- **CRC:** `RF24_CRC_16`  
+  - Rationale: stronger error detection → fewer undetected corrupt packets.
+- **Auto-ACK:** `setAutoAck(true)`  
+  - Rationale: required so `radio.write()` returns success only when the receiver ACKs the packet.
+- **Retries:** `setRetries(RETRY_DELAY=5, RETRY_COUNT=15)`  
+  - Meaning: delay steps of 250 µs → 5 × 250 µs = **1250 µs** between retries, up to **15** retries per transmission attempt.
+  - Rationale: improves reliability in case of packet loss.
+- **Payload mode:** `disableDynamicPayloads()` and `setPayloadSize(sizeof(uint32_t))`  
+  - Fixed payload size of **4 bytes per packet** (one 32-bit number per radio packet).
+  - Rationale: simple and consistent for measurement, but it increases per-packet overhead.
+
+#### Variable under test
+Only the **RF data rate** was changed between experiments (and it must match on both TX and RX):
+- `RF24_250KBPS`
+- `RF24_1MBPS`
+- `RF24_2MBPS`
+
+All other parameters (channel, PA level, CRC length, retries, payload size, address, physical placement) were kept the same.
+
+#### Code behavior
+**Transmitter (TX) logic**
+- Starts a timer using `startMs = millis()`.
+- Sends values `i = 0 ... 9999` one by one:
+  - Each value is sent using `radio.write(&i, sizeof(i))`.
+  - If `radio.write()` returns `false`, the code retries in a `while (!radio.write(...))` loop until it succeeds.
+- Stops the timer at the end and prints:
+  - configured RF rate
+  - total time
+  - achieved throughput in bps and kbps
+
+**Receiver (RX) logic**
+- Keeps an `expected` counter starting at 0.
+- Reads incoming `uint32_t v`.
+- Only accepts the number if `v == expected`, then increments `expected`.
+  - This handles duplicates caused by retransmissions: duplicates are ignored automatically.
+- When `expected == 10000`, RX prints that all numbers were received and stops.
+
+This guarantees (in-order) reception of the full 10,000-value dataset, because TX does not advance to the next value until the current value is acknowledged.
+
 #### Measurement procedure
+
 For each RF data rate (250 kbps, 1 Mbps, 2 Mbps):
 1. Set `RF_RATE` to the desired value in **both** TX and RX sketches.
 2. Upload the RX sketch to the RX board and open Serial Monitor at **115200 baud**.
@@ -226,7 +285,7 @@ The achieved throughput is much lower than the configured RF data rate in all te
 - The **2 Mbps** configuration performs much better (≈55.7 kbps) than 250 kbps and 1 Mbps.
 - The **1 Mbps** test is even slower than 250 kbps, which suggests the system likely spent significant time on retries/timeouts/ACK waiting, or that fixed software delays dominated that run.
 
-# Questions
+# Questions answers
 
 1) What is the maximum output power of the NRF24 module?
 How does that compare to the output power of a 3G/4G/5G mobile phone?
