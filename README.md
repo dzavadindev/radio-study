@@ -159,6 +159,8 @@ This part is about testing link reliability under different possible configurati
 
 The main principle of work for the app is:
 
+#### Measurement procedure
+
 - TX selects a config (PA, Rate, ARD, ARC and Channel).
 - Then it sends a packet containing that config information to the RX over the Control Channel (a channel and config combo that is static for both RX and TX).
 - RX receives the config on the Control Channel and sends and auto-ACK.
@@ -224,7 +226,7 @@ The achieved throughput is much lower than the configured RF data rate in all te
 | 1 Mbps   | 138.257 | 2,314.53  | 2.31  |
 | 2 Mbps   | 5.742   | 55,729.71 | 55.73 |
 
-**Interpretation:**
+#### Conclusion
 - Throughput is orders of magnitude lower than the configured RF rate, indicating the transfer is dominated by overhead and waiting rather than raw bit rate.
 - The **2 Mbps** configuration performs much better (≈55.7 kbps) than 250 kbps and 1 Mbps.
 - The **1 Mbps** test is even slower than 250 kbps, which suggests the system likely spent significant time on retries/timeouts/ACK waiting, or that fixed software delays dominated that run.
