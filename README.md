@@ -80,7 +80,7 @@ Payload size is fixed with `radio.setPayloadSize(sizeof(Msg))`, and its 24 bits.
 
 ### Helpers 
 
-####  (`sendState(uint8_t newState)`)
+#### `sendState(uint8_t newState)`
 
 Packages up the current state into a `Msg` and transmits it to the other board. Before sending, it:
 
@@ -119,22 +119,6 @@ It ignores:
 If a packet passes those checks, it treats the packet’s `ledCount` as valid, clamps it to `NUM_LEDS` for safety, applies it locally via `applyLedCount()`.
 
 This is basically the “other side changed state; mirror it here” path. The seq-based filter is what prevents flicker or reverting when retries/out-of-order deliveries happen.
-
-### Normal test setup 
-<img src="./images/setup.png" alt="Normal test setup" width="450">
-In the normal close-range setup, most configurations performed very reliably when the channel was relatively “clean” (for example channel 100). At 2 Mbps with PA_LOW the link was consistently perfect (PER = 0) with essentially no retransmission effort (avgRetries ≈ 0). At 1 Mbps, the weakest retry setting (ARC = 1) produced small but repeatable loss, while slightly stronger retry budgets (typically ARC ≥ 3) removed the losses and kept PER at or near zero. A strong and consistent finding was that PA_HIGH often made performance dramatically worse (very high PER and high avgRetries), which suggests receiver saturation/desense or strong multipath effects at short distance rather than “more power = better.”
-
-### Distance test
-<img src="./images/5m_setup.png" alt="Normal test setup" width="450">
-At ~5 m the same patterns remained, but the reduced link margin made weaknesses more visible. The 1 Mbps configuration with minimal retries degraded compared to the close-range setup, while moderate retry settings (ARC ≥ 3) generally restored PER back toward zero on clean channels. Channel choice still dominated: channels that overlap busy parts of the 2.4 GHz spectrum showed much higher avgRetries and, in some cases, clear packet loss. This indicates that increasing distance mainly amplifies the impact of interference and makes conservative retry settings more valuable for stability.
-
-### Penetration test (close, with a box between)
-<img src="./images/box_in_the_middle.png" alt="Normal test setup" width="450">
-With a box between the radios, performance was generally closer to the normal close-range setup than to the 5 m test: the obstacle reduced signal quality, but not as strongly as increasing distance. Clean-channel configurations stayed robust, while interference-prone channels still produced high retransmissions and loss. The same PA behavior also persisted: PA_HIGH remained a poor choice and could severely reduce reliability even though an obstacle was present. Overall, the penetration test confirms that obstacles reduce margin, but channel overlap and power-related effects can still be the main drivers of performance.
-
-### Conclusion
-
-Across all three tests, the most reliable approach in this environment is using a clean channel, avoiding PA_HIGH, and using at least a modest retry budget (ARC ≥ 3) for 1 Mbps operation. Distance and obstacles mainly reduce margin, which makes the choice of channel and retry configuration more important, while excessive transmit power can be counterproductive.
 
 ## Assignment 2
 
@@ -202,7 +186,21 @@ Then to get our results we:
 
 #### Results
 
-#### Conclusion
+**Normal test setup** 
+<img src="./images/setup.png" alt="Normal test setup" width="450">
+In the normal close-range setup, most configurations performed very reliably when the channel was relatively “clean” (for example channel 100). At 2 Mbps with PA_LOW the link was consistently perfect (PER = 0) with no retransmission effort (avgRetries ≈ 0). At 1 Mbps, the weakest retry setting (ARC = 1) produced small but repeatable loss, while slightly stronger retry budget (typically ARC ≥ 3) removed the losses and kept PER at or near zero. A strong and consistent finding was that PA_HIGH often made performance dramatically worse (very high PER and high avgRetries), which suggests that a stronger signal causes more rebounce at short distance, hindering the PER, rather than “more power = better.”
+
+**Distance test**
+<img src="./images/5m_setup.png" alt="5 meter setup" width="450">
+At ~5 m the same patterns remained, but the reduced link margin made weaknesses more visible. The 1 Mbps configuration with minimal retries performed worse compared to the close-range setup, while moderate retry settings (ARC ≥ 3) generally restored PER back toward zero on clean channels. Channel choice still dominated: channels that overlap busy parts of the 2.4 GHz spectrum showed much higher avgRetries and, in some cases, clear packet loss. This indicates that increasing distance mainly amplifies the impact of interference and makes conservative retry settings more valuable for stability.
+
+**Obstacle test (close, with a box between)**
+<img src="./images/box_in_the_middle.png" alt="Obstacle setup" width="450">
+With a box between the radios, performance was generally closer to the normal close-range setup than to the 5 m test: the obstacle reduced signal quality, but not as strongly as increasing distance. Clean-channel configurations stayed robust, while interference-prone channels still produced high retransmissions and loss. The same PA behavior also persisted: PA_HIGH remained a poor choice and could severely reduce reliability even though an obstacle was present. Overall, the obstacle test confirms that obstacles reduce margin, but channel overlap and power-related effects are still be the main drivers of performance.
+
+### Conclusion
+
+Across all three tests, the most reliable approach in this environment is using a clean channel, avoiding PA_HIGH, and using at least a modest retry budget (ARC ≥ 3) for 1 Mbps operation. Distance and obstacles mainly reduce margin, which makes the choice of channel and retry configuration more important, while excessive transmit power can be counterproductive.
 
 ### Throughput (Part 2)
 
