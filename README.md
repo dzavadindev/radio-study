@@ -92,12 +92,9 @@ It temporarily stops listening because the RF24 can’t be in RX and TX at the s
 
 #### `updateLocalAndBroadcast(int8_t delta)`
 
-This is the “button press effect” function. It applies `delta` (+1 or -1) to `ledCount`, clamps the result to the valid range (0..`NUM_LEDS`), and returns early if the value didn’t actually change (e.g., you try to decrement at 0).
+This function handles the effect of a button press. It applies delta (+1 or −1) to ledCount, clamps the result to the valid range (0..NUM_LEDS), and returns early if the value would not change (for example, decrementing when ledCount is already 0).
 
-**WE ACTUALLY NEED TO ONLY UPDATE WHEN WE GET ACK**
-It updates the local LEDs first (so the board feels responsive), and only then broadcasts the full state. The payload is the full `ledCount`, not “+1/-1”, so even if packets are lost, the next successful packet will resynchronize the other board.
-
-If the first send fails, it waits a few milliseconds and tries once more. That’s not a full resend queue, but it’s enough to smooth out occasional transient failures.
+Instead of updating the LEDs immediately, it first sends the new full state (ledCount) to the other board. If the transmission is acknowledged (ACK), it then updates its own ledCount and applies the LED change locally. If the first send fails, it waits a few milliseconds and retries once. Because the payload always contains the full ledCount value (not just “+1/-1”), the next successful packet will resynchronize the other board even if a previous update was lost.
 
 ### Button presses and actual radio calls (`handleButtonsAndSend()`)
 
@@ -153,14 +150,14 @@ This part is about testing link reliability under different possible configurati
 
 - Power Amplification (PA) - literal power of the signal
 - Datarate - how much data can the communication support, bps
-- Automatic Retry Delay - factor defining how much 250uS to wait between retires 
+- Automatic Retry Delay - factor defining how much 250uS to wait between retries 
 - Automatic Retry Count - the maximum amount of retries before giving up
 - Channel - the communication channel inside the band
 
 We could be testing all ~390,000 possible combinations, but would not have been fun. So we have a baseline configuration we are going to modify to test for different configuration values. That default config is:
 
 - PA - Low
-- Datarate - 1Mbsp
+- Datarate - 1Mbps
 - ARD - 5
 - ARC - 5
 - Channel - 40
@@ -248,9 +245,7 @@ The achieved throughput is much lower than the configured RF data rate in all te
 | 2 Mbps   | 5.742   | 55,729.71 | 55.73 |
 
 #### Conclusion
-- Throughput is orders of magnitude lower than the configured RF rate, indicating the transfer is dominated by overhead and waiting rather than raw bit rate.
-- The **2 Mbps** configuration performs much better (≈55.7 kbps) than 250 kbps and 1 Mbps.
-- The **1 Mbps** test is even slower than 250 kbps, which suggests the system likely spent significant time on retries/timeouts/ACK waiting, or that fixed software delays dominated that run.
+The measured throughput is orders of magnitude lower than the configured RF data rate, which shows that the transfer speed is mainly limited by protocol overhead and waiting time (such as ACK handling, retries/timeouts, and fixed software delays) rather than the raw radio bit rate itself. In this set of tests, the 2 Mbps configuration performs clearly best at about 55.7 kbps, far outperforming both 250 kbps and 1 Mbps. Interestingly, the 1 Mbps result is even slower than 250 kbps, which strongly suggests that this run was dominated by extra waiting—likely more retransmissions or time spent waiting for acknowledgements, or that constant delays in the code outweighed any advantage from the higher RF rate.
 
 # Questions answers
 
@@ -270,7 +265,7 @@ Max milliwats per TX setting:
 
 ```
  A specific range of frequencies in the electromagnetic frequency spectrum assigned to certain applications.
- For example the frequency band of NRF25L01+ is 2.4GHz.
+ For example the frequency band of nRF25L01+ is 2.4GHz.
 ```
 
 3) Which frequency bands can be used by this radio?
