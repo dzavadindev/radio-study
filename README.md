@@ -467,8 +467,6 @@ TX sends values **0..9999** as individual 4-byte packets. It measures the total 
    - (This is not included in the throughput bit count, but it does take time on-air.)
 3. For each `i` from 0 to 9999:
    - Keeps calling `radio.write(&i, sizeof(i))` until it returns `true` (ACK received)
-   - Prints `"Loading . . . "` if a send attempt fails
-   - Prints progress: `Count: i`
 4. Records `endMs` and computes:
    - `seconds = (endMs - startMs) / 1000`
    - `achieved_bps = TOTAL_BITS / seconds`
