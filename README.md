@@ -186,23 +186,164 @@ Then to get our results we:
 
 #### Results
 
-**Normal test setup** 
-<img src="./images/setup.png" alt="Normal test setup" width="450">
+ **Normal test setup**
+<img src="./images/setup.png" alt="Normal test setup" width="1000">
 In the normal close-range setup, most configurations performed very reliably when the channel was relatively “clean” (for example channel 100). At 2 Mbps with PA_LOW the link was consistently perfect (PER = 0) with no retransmission effort (avgRetries ≈ 0). At 1 Mbps, the weakest retry setting (ARC = 1) produced small but repeatable loss, while slightly stronger retry budget (typically ARC ≥ 3) removed the losses and kept PER at or near zero. A strong and consistent finding was that PA_HIGH often made performance dramatically worse (very high PER and high avgRetries), which suggests that a stronger signal causes more rebounce at short distance, hindering the PER, rather than “more power = better.”
 
+
 **Distance test**
-<img src="./images/5m_setup.png" alt="5 meter setup" width="450">
+<img src="./images/5m_setup.png" alt="5 meter setup" width="1000">
 At ~5 m the same patterns remained, but the reduced link margin made weaknesses more visible. The 1 Mbps configuration with minimal retries performed worse compared to the close-range setup, while moderate retry settings (ARC ≥ 3) generally restored PER back toward zero on clean channels. Channel choice still dominated: channels that overlap busy parts of the 2.4 GHz spectrum showed much higher avgRetries and, in some cases, clear packet loss. This indicates that increasing distance mainly amplifies the impact of interference and makes conservative retry settings more valuable for stability.
 
+
 **Obstacle test (close, with a box between)**
-<img src="./images/box_in_the_middle.png" alt="Obstacle setup" width="450">
+<img src="./images/box_in_the_middle.png" alt="Obstacle setup" width="1000">
 With a box between the radios, performance was generally closer to the normal close-range setup than to the 5 m test: the obstacle reduced signal quality, but not as strongly as increasing distance. Clean-channel configurations stayed robust, while interference-prone channels still produced high retransmissions and loss. The same PA behavior also persisted: PA_HIGH remained a poor choice and could severely reduce reliability even though an obstacle was present. Overall, the obstacle test confirms that obstacles reduce margin, but channel overlap and power-related effects are still be the main drivers of performance.
 
-### Conclusion
+#### Conclusion
 
 Across all three tests, the most reliable approach in this environment is using a clean channel, avoiding PA_HIGH, and using at least a modest retry budget (ARC ≥ 3) for 1 Mbps operation. Distance and obstacles mainly reduce margin, which makes the choice of channel and retry configuration more important, while excessive transmit power can be counterproductive.
 
 For a more elaborate breakdown of the results, see the attached PERTestResult.xlsx spreadsheet.
+
+### Code brief — RF24 Packet Error Rate (PER) Test (TX + RX)
+
+These two sketches implement a repeatable **Packet Error Rate (PER)** measurement for an nRF24L01+ link. The transmitter (TX) cycles through a list of preset RF configurations from `RF24TestConfigs.h`. For each preset, it first coordinates the test with the receiver (RX) using a fixed **CONTROL link**, then sends a fixed number of **DATA packets** under the selected test settings and prints results as CSV (including PER and average retries).
+
+The receiver (RX) runs a simple state machine:
+- **CONTROL mode:** listen for configuration packets on `CTL01` using fixed control settings
+- **TEST mode:** after CONFIG, switch to `DAT01`, count packets, and return to CONTROL on END or timeout
+
+---
+
+### Packet types and payload structs
+
+Both TX and RX use the same fixed 32-byte payload size and define these packet types:
+
+- **`PKT_CONFIG`**: carries test parameters (channel, datarate, PA, ARD/ARC, packet count)
+- **`PKT_PING`**: a start-of-test sync packet
+- **`PKT_DATA`**: the measurement packets (contain a sequence number)
+- **`PKT_END`**: signals test end
+
+All packets include a shared `MAGIC` value to reject unrelated traffic.
+
+---
+
+### Transmitter (TX) — `Assignment2-1-T.ino`
+
+#### Purpose
+TX loops over preset configurations, runs a test for each preset, and prints a CSV row:
+`label,ch,rate,pa,ard,arc,sent,acked,failed,per,avgRetries`
+
+#### Key constants
+- Control pipe address: `CTL01`
+- Data pipe address: `DAT01`
+- Control settings (fixed): channel 2, 1 Mbps, PA_LOW, ARD=5, ARC=15
+- Test size: `N_PACKETS = 500`
+- Inter-packet delay: `INTERVAL_MS = 5`
+
+#### Helpers
+
+#### `applyControlRadio()`
+Puts the radio into the fixed **CONTROL configuration** and clears FIFOs/status. Used whenever TX needs to communicate control messages reliably (probe/CONFIG).
+
+#### `sendWithRetries(...)`
+Sends a packet repeatedly until it is ACKed or the attempt limit is reached. Used for:
+- CONFIG (up to 60 tries)
+- PING (up to 200 tries)
+- END (up to 40 tries)
+
+#### `waitForRxControlReady(timeoutMs)`
+Synchronizes with RX by repeatedly sending a small probe packet on `CTL01`. If TX receives an ACK, it assumes RX is back in CONTROL mode and ready for the next CONFIG.
+
+#### Main test flow
+
+#### `runOneTest(idx)`
+1. **Sync:** ensure RX is in CONTROL mode (`waitForRxControlReady(4000)`).
+2. **Send CONFIG** on `CTL01` using control settings (reliable send via `sendWithRetries`).
+3. **Apply preset config** locally (`rf24cfg_apply(radio, cfg)`) and switch TX writing pipe to `DAT01`.
+4. **Send PING** to confirm TEST link is alive (reliable send via `sendWithRetries`).
+5. **Send DATA packets** (`N_PACKETS = 500`):
+   - Calls `radio.write()` once per packet
+   - Tracks `sent`, `acked`, `failed`
+   - Adds `radio.getARC()` to estimate retry effort
+6. **Send END** (with retries) so RX can return to CONTROL.
+7. **Print CSV result line** including:
+   - `PER = failed / sent`
+   - `avgRetries = retriesSum / sent`
+8. **Resync:** wait for RX CONTROL again before moving to the next preset.
+
+#### `setup()`
+- Initializes Serial + RF24
+- Applies shared base settings (CRC16, auto-ack on, fixed payload size 32 bytes, dynamic payloads disabled)
+- Prints radio details, then runs all presets once
+- `loop()` is empty (one-shot benchmark)
+
+---
+
+### Receiver (RX) — `Assignment2-1-R.ino`
+
+#### Purpose
+RX listens on the CONTROL link for `PKT_CONFIG`, then switches into TEST mode and counts incoming `PKT_DATA`. It returns to CONTROL when it receives `PKT_END`. If TX stops or END is missed, RX automatically returns to CONTROL after `TEST_TIMEOUT_MS`.
+
+#### Key constants
+- Control pipe: `CTL01`
+- Data pipe: `DAT01`
+- Control settings (fixed): channel 2, 1 Mbps, PA_LOW, ARD=5, ARC=15
+- Test timeout: `TEST_TIMEOUT_MS = 1500 ms`
+
+#### State variables
+- `inTest`: false = CONTROL mode, true = TEST mode
+- `curTestId`: active test id (used to ignore mismatched packets)
+- `expectedPackets`: number of packets TX said it will send (from CONFIG)
+- `gotPackets`: number of valid DATA packets received for this test
+- `lastTestSeenMs`: last time RX saw a valid TEST packet (PING/DATA); used for timeout
+
+#### Helpers
+
+##### `applyRadio(ch, rate, pa, ard, arc)`
+Stops listening, clears FIFOs/status, applies the provided settings, and starts listening again.
+
+##### `enterControl()`
+Switches RX to CONTROL mode:
+- applies fixed control config
+- opens reading pipe `CTL01`
+- prints `RX: CONTROL (waiting CONFIG)`
+
+##### `enterTestFromCfg(const ConfigPkt& c)`
+Switches RX to TEST mode:
+- stores `testId`, resets counters, starts timeout timer
+- applies settings from CONFIG
+- opens reading pipe `DAT01`
+- prints a summary line of the active test configuration
+
+
+#### `setup()`
+- Initializes Serial + RF24
+- Applies shared base settings (CRC16, auto-ack on, payload size 32 bytes, dynamic payloads disabled)
+- Prints radio details and enters CONTROL
+
+#### `loop()`
+
+##### Timeout fallback
+If RX is in TEST mode and does not see any valid TEST packets for 1500 ms:
+- prints a timeout message
+- returns to CONTROL mode
+
+##### Packet processing
+RX reads all available packets and checks the packet type:
+
+- **In CONTROL mode:**
+  - only accepts `PKT_CONFIG`
+  - checks `magic`
+  - switches to TEST mode (`enterTestFromCfg`)
+
+- **In TEST mode:**
+  - `PKT_PING`: refreshes `lastTestSeenMs` if `magic` and `testId` match
+  - `PKT_DATA`: increments `gotPackets` and refreshes timer if `magic` and `testId` match
+  - `PKT_END`: prints `gotPackets` vs `expectedPackets` and returns to CONTROL if valid
+
+Unknown or mismatched packets are ignored.
 
 ### Throughput (Part 2)
 
@@ -251,6 +392,95 @@ The achieved throughput is much lower than the configured RF data rate in all te
 
 #### Conclusion
 The measured throughput is orders of magnitude lower than the configured RF data rate, which shows that the transfer speed is mainly limited by protocol overhead and waiting time (such as ACK handling, retries/timeouts, and fixed software delays) rather than the raw radio bit rate itself. In this set of tests, the 2 Mbps configuration performs clearly best at about 55.7 kbps, far outperforming both 250 kbps and 1 Mbps. Interestingly, the 1 Mbps result is even slower than 250 kbps, which strongly suggests that this run was dominated by extra waiting—likely more retransmissions or time spent waiting for acknowledgements, or that constant delays in the code outweighed any advantage from the higher RF rate.
+
+### Code brief — nRF24 Throughput Test (TX + RX)
+
+These two sketches measure **application-level throughput** of an nRF24L01+ link by reliably transmitting **10,000 32-bit integers** from a transmitter (TX) to a receiver (RX). The RF configuration (channel, data rate, PA level, retry settings) is set on both devices and can be changed between runs to compare performance.
+
+> Note: In the current implementation each radio payload is **4 bytes** (one `uint32_t`) per packet — not 32-byte packets.
+
+---
+
+#### Shared configuration (both sketches)
+
+TX and RX must match on:
+
+- **Address:** `THR01`
+- **Channel:** `RF_CHANNEL = 76`
+- **Data rate:** `RF_RATE` (250 kbps / 1 Mbps / 2 Mbps)
+- **PA level:** `RF_PA = RF24_PA_LOW`
+- **Auto-retry:** `RETRY_DELAY = 5`, `RETRY_COUNT = 15`
+- **CRC:** `RF24_CRC_16`
+- **Payload size:** `sizeof(uint32_t)` = **4 bytes**
+- **Dynamic payloads:** disabled (fixed payload size)
+
+Auto-ACK is enabled so `radio.write()` returns `true` only when an ACK is received.
+
+---
+
+#### Receiver (RX) — `Assignment2-2-R.ino`
+
+##### Purpose
+RX listens for incoming 32-bit numbers and accepts only the **next expected** value (0, 1, 2, …). This automatically filters duplicates caused by TX retransmissions. When all 10,000 values are received, RX prints a completion message and stops.
+
+##### Key state
+- `expected`: next value RX is waiting for (starts at 0)
+- `N = 10000`: total values required
+
+##### `setup()`
+- Initializes Serial and the RF24 module
+- Applies RF settings (channel/rate/PA/retries, CRC16, fixed 4-byte payload)
+- Opens reading pipe `THR01` and starts listening
+- Prints `RX: ready`
+
+##### `loop()`
+- Returns immediately if no packet is available
+- Reads one `uint32_t v`
+- If `v == expected`:
+  - increments `expected`
+  - prints the value
+  - when `expected == 10000`, prints `RX: received all 10,000 numbers.` and stops forever
+- If `v != expected`, the packet is ignored (duplicates/out-of-order)
+
+---
+
+#### Transmitter (TX) — `Assignment2-2-T.ino`
+
+##### Purpose
+TX sends values **0..9999** as individual 4-byte packets. It measures the total time for the full sequence to be delivered (ACKed), then computes throughput:
+
+- Total payload bits: `TOTAL_NUMBERS * 32 = 320,000 bits`
+- Throughput (bps) = `TOTAL_BITS / time_seconds`
+
+##### `setup()`
+- Initializes Serial and RF24
+- Applies RF settings (channel/rate/PA/retries, CRC16, fixed 4-byte payload)
+- Enables Auto-ACK
+- Calls `radio.enableAckPayload()` (enabled, but not used by this sketch since TX never reads ACK payload data)
+- Opens writing pipe `THR01`, stops listening (TX mode), flushes FIFOs, clears status flags
+- Prints `TX ready. Starting throughput test...`
+
+##### `loop()`
+1. Records `startMs`
+2. Sends one extra “dummy” value first:
+   - `thing = 12345; radio.write(&thing, sizeof(thing));`
+   - (This is not included in the throughput bit count, but it does take time on-air.)
+3. For each `i` from 0 to 9999:
+   - Keeps calling `radio.write(&i, sizeof(i))` until it returns `true` (ACK received)
+   - Prints `"Loading . . . "` if a send attempt fails
+   - Prints progress: `Count: i`
+4. Records `endMs` and computes:
+   - `seconds = (endMs - startMs) / 1000`
+   - `achieved_bps = TOTAL_BITS / seconds`
+5. Prints configured RF rate, time, achieved throughput (bps and kbps)
+6. Stops forever (`while (1) {}`)
+---
+
+#### Important notes (affects throughput results)
+
+- **Serial printing inside the send loop** (“Count: …” and “Loading…”) can slow the TX significantly and reduce measured throughput, because printing is much slower than the radio.
+- The TX also sends one **extra number (12345)** before the main 0..9999 sequence; this increases total time slightly but is not counted in `TOTAL_BITS`.
+- `enableAckPayload()` is enabled on TX, but RX does not provide ACK payloads and TX does not read them, so it has no effect in this version.
 
 # Questions answers
 
