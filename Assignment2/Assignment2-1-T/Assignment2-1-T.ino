@@ -11,7 +11,7 @@
 
 #include "RF24TestConfigs.h"
 
-#define CE_PIN 7
+#define CE_PIN 9
 #define CSN_PIN 8
 #define MAGIC 0xC0FFEE42UL
 
@@ -91,6 +91,10 @@ static bool sendWithRetries(const void *p, uint8_t len, int tries,
   return false;
 }
 
+
+
+
+
 static uint8_t rateCodeFromEnum(rf24_datarate_e r) {
   if (r == RF24_250KBPS)
     return 0;
@@ -118,7 +122,7 @@ static bool waitForRxControlReady(uint32_t timeoutMs) {
   uint32_t t0 = millis();
   while (millis() - t0 < timeoutMs) {
     if (radio.write(probe, sizeof(probe))) {
-      Serial.println("TX: RX back in CONTROL");
+      // Serial.println("TX: RX back in CONTROL");
       return true;
     }
     delay(10);
@@ -130,10 +134,6 @@ static bool waitForRxControlReady(uint32_t timeoutMs) {
 static void runOneTest(size_t idx) {
   const RadioConfig &cfg = rf24cfg_get(idx);
   const uint16_t testId = BASE_TEST_ID + (uint16_t)idx;
-
-  Serial.println("\n==============================");
-  Serial.print("Preset: ");
-  Serial.println(cfg.name);
 
   // Make sure RX is in CONTROL before CONFIG
   waitForRxControlReady(4000);
@@ -153,14 +153,12 @@ static void runOneTest(size_t idx) {
   c.arc = cfg.arc;
   c.magic = MAGIC;
 
-  Serial.println("TX: sending CONFIG...");
+ 
   if (!sendWithRetries(&c, sizeof(c), 60, 20)) {
-    Serial.println("TX: CONFIG FAILED -> skip preset");
     return;
   }
-  Serial.println("TX: CONFIG ACKed");
 
-  // 2) switch to test + PING
+
   rf24cfg_apply(radio, cfg);
   radio.openWritingPipe(DATA_ADDR);
 
@@ -169,12 +167,11 @@ static void runOneTest(size_t idx) {
   p.testId = testId;
   p.magic = MAGIC;
 
-  Serial.println("TX: pinging...");
+ 
   if (!sendWithRetries(&p, sizeof(p), 200, 10)) {
-    Serial.println("TX: PING FAILED -> skip preset");
     return;
   }
-  Serial.println("TX: PING ACKed");
+
 
   // 3) DATA
   uint32_t sent = 0, acked = 0, failed = 0, retriesSum = 0;
@@ -206,17 +203,18 @@ static void runOneTest(size_t idx) {
   float per = (sent > 0) ? (float)failed / (float)sent : 0.0f;
   float avgRetries = (sent > 0) ? (float)retriesSum / (float)sent : 0.0f;
 
-  Serial.println("--- RESULT (TX) ---");
-  Serial.print("sent=");
-  Serial.print(sent);
-  Serial.print(" acked=");
-  Serial.print(acked);
-  Serial.print(" failed=");
-  Serial.print(failed);
-  Serial.print(" PER=");
-  Serial.print(per, 6);
-  Serial.print(" avgRetries=");
+  Serial.print(cfg.name);              Serial.print(",");
+  Serial.print(cfg.channel);           Serial.print(",");
+  Serial.print(rateCodeFromEnum(cfg.rate)); Serial.print(",");
+  Serial.print(paCodeFromEnum(cfg.pa));     Serial.print(",");
+  Serial.print(cfg.ard);               Serial.print(",");
+  Serial.print(cfg.arc);               Serial.print(",");
+  Serial.print(sent);                  Serial.print(",");
+  Serial.print(acked);                 Serial.print(",");
+  Serial.print(failed);                Serial.print(",");
+  Serial.print(per, 6);                Serial.print(",");
   Serial.println(avgRetries, 3);
+
 
   // Let RX timeout back to CONTROL even if END got lost
   waitForRxControlReady(4000);
@@ -246,7 +244,8 @@ void setup() {
 
   Serial.println("TX: started");
   radio.printDetails();
-
+  
+  Serial.println("label,ch,rate,pa,ard,arc,sent,acked,failed,per,avgRetries");
   for (size_t i = 0; i < rf24cfg_count(); i++) {
     runOneTest(i);
     delay(500);

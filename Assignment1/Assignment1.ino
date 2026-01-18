@@ -2,7 +2,7 @@
 #include <MCP23S08.h>
 #include <SPI.h>
 
-#define CE_PIN 7
+#define CE_PIN 9
 #define CSN_PIN 8
 #define MCP_CS_PIN 10
 
@@ -10,7 +10,7 @@ RF24 radio(CE_PIN, CSN_PIN);
 MCP23S08 MCP(MCP_CS_PIN);
 
 // Pick one for board:
-#define DEVICE_ADDR 0  // dev01 board: 0, dev02 board: 1
+#define DEVICE_ADDR 1  // dev01 board: 0, dev02 board: 1
 
 const uint8_t ADDR_FIRST[6] = "dev01";
 const uint8_t ADDR_SECOND[6] = "dev02";
@@ -84,16 +84,21 @@ void updateLocalAndBroadcast(int8_t delta) {
 
   if ((uint8_t)next == ledCount)
     return;
-  ledCount = (uint8_t)next;
 
-  applyLedCount();
+  uint8_t target = (uint8_t)next;
 
-  // Send the full state
-  if (!sendState(ledCount)) {
+  bool ok = sendState(target);
+  if (!ok) {
     delay(5);
-    sendState(ledCount);
+    ok = sendState(target);
+  }
+
+  if (ok) {
+    ledCount = target;
+    applyLedCount();
   }
 }
+
 
 void handleButtonsAndSend() {
   unsigned long now = millis();
@@ -183,7 +188,7 @@ void setup() {
   radio.setChannel(76);
   radio.setRetries(5, 15);
   radio.setPayloadSize(sizeof(Msg));
-
+  radio.setAutoAck(true);
   radio.openWritingPipe(OTHER_ADDR);
   radio.openReadingPipe(1, MY_ADDR);
   radio.startListening();
