@@ -54,9 +54,6 @@ void setup() {
 void loop() {
   uint32_t startMs = millis();
 
-  uint32_t thing = 12345;
-  bool a = radio.write(&thing, sizeof(thing));
-
   for (uint32_t i = 0; i < TOTAL_NUMBERS; i++) {
     // Keep sending i until it is ACKed
     while (!radio.write(&i, sizeof(i))) {

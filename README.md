@@ -301,16 +301,16 @@ RX listens on the CONTROL link for `PKT_CONFIG`, then switches into TEST mode an
 
 #### Helpers
 
-##### `applyRadio(ch, rate, pa, ard, arc)`
+#### `applyRadio(ch, rate, pa, ard, arc)`
 Stops listening, clears FIFOs/status, applies the provided settings, and starts listening again.
 
-##### `enterControl()`
+#### `enterControl()`
 Switches RX to CONTROL mode:
 - applies fixed control config
 - opens reading pipe `CTL01`
 - prints `RX: CONTROL (waiting CONFIG)`
 
-##### `enterTestFromCfg(const ConfigPkt& c)`
+#### `enterTestFromCfg(const ConfigPkt& c)`
 Switches RX to TEST mode:
 - stores `testId`, resets counters, starts timeout timer
 - applies settings from CONFIG
@@ -325,12 +325,12 @@ Switches RX to TEST mode:
 
 #### `loop()`
 
-##### Timeout fallback
+#### Timeout fallback
 If RX is in TEST mode and does not see any valid TEST packets for 1500 ms:
 - prints a timeout message
 - returns to CONTROL mode
 
-##### Packet processing
+#### Packet processing
 RX reads all available packets and checks the packet type:
 
 - **In CONTROL mode:**
@@ -444,15 +444,15 @@ RX listens for incoming 32-bit numbers and accepts only the **next expected** va
 
 ---
 
-#### Transmitter (TX) — `Assignment2-2-T.ino`
+### Transmitter (TX) — `Assignment2-2-T.ino`
 
-##### Purpose
+#### Purpose
 TX sends values **0..9999** as individual 4-byte packets. It measures the total time for the full sequence to be delivered (ACKed), then computes throughput:
 
 - Total payload bits: `TOTAL_NUMBERS * 32 = 320,000 bits`
 - Throughput (bps) = `TOTAL_BITS / time_seconds`
 
-##### `setup()`
+#### `setup()`
 - Initializes Serial and RF24
 - Applies RF settings (channel/rate/PA/retries, CRC16, fixed 4-byte payload)
 - Enables Auto-ACK
@@ -460,7 +460,7 @@ TX sends values **0..9999** as individual 4-byte packets. It measures the total 
 - Opens writing pipe `THR01`, stops listening (TX mode), flushes FIFOs, clears status flags
 - Prints `TX ready. Starting throughput test...`
 
-##### `loop()`
+#### `loop()`
 1. Records `startMs`
 2. Sends one extra “dummy” value first:
    - `thing = 12345; radio.write(&thing, sizeof(thing));`
@@ -475,12 +475,6 @@ TX sends values **0..9999** as individual 4-byte packets. It measures the total 
 5. Prints configured RF rate, time, achieved throughput (bps and kbps)
 6. Stops forever (`while (1) {}`)
 ---
-
-#### Important notes (affects throughput results)
-
-- **Serial printing inside the send loop** (“Count: …” and “Loading…”) can slow the TX significantly and reduce measured throughput, because printing is much slower than the radio.
-- The TX also sends one **extra number (12345)** before the main 0..9999 sequence; this increases total time slightly but is not counted in `TOTAL_BITS`.
-- `enableAckPayload()` is enabled on TX, but RX does not provide ACK payloads and TX does not read them, so it has no effect in this version.
 
 # Questions answers
 
