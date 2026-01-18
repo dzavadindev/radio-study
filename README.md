@@ -258,7 +258,7 @@ The achieved throughput is much lower than the configured RF data rate in all te
 How does that compare to the output power of a 3G/4G/5G mobile phone?
 
 ```
-Officialy the max out put is 0 dBm ≈ 1m, but the transmitor suports when looking at the data sheet +4dBm + 4 mW
+Officialy the max out put is 0 dBm ≈ 1mW (10.1 Antenna output), but the transmitor suports when looking at the data sheet +4dBm + 4 mW (5.3 Transmitter operation Page 15 of 78)
 It is a lot lower than the output power of 3G, 4G and 5G 
 Max milliwats per TX setting:  
 - 3G = +24 dBm = 250 mW 
@@ -283,21 +283,21 @@ The nRF24L01+ is designed for operation in the world wide ISM frequency band at 
 Wi-Fi & Bluetooth bands: 2.4 GHz Wi-Fi,  uses 2412 MHz (channel 1) up to 2472 MHz (channel 13) GHz and also 5 GHz; newer Wi-Fi can also use 6 GHz where allowed.
 Bluetooth channel center frequencies: 2402–2480 MHz
 
-Overlap nRF24 - 2.4 GHz Wi-Fi: about 2401–2483.5 MHz basically the whole 2.4 GHz Wi-Fi band sits inside the nRF24’s 2.4 GHz ISM range.
+Overlap nRF24 - 2.4 GHz Wi-Fi: about 2412–2472 MHz  the whole 2.4 GHz Wi-Fi band sits inside the nRF24’s 2.4 GHz ISM range.
 Overlap nRF24 - Bluetooth: 2402–2480 MHz  Basically all of Bluetooth overlaps.
 ```
 
-4) What is the wavelength in meters for the used NRF24 frequency band?
+4) What is the wavelength in meters for the used NRF24 frequency band? 
 
 ```
-λ=v/f
+λ=v/f (https://www.calculatorsoup.com/calculators/physics/wavelength.php)
 λ= 3*10^8 m/s / 2.4 GHz ~ 0.12 m
 ```
 
 5) Which data rates does the radio support?
 
 ```
-it supports 250kbps, 1Mbps and 2Mbps on air data rates.
+it supports 250kbps, 1Mbps and 2Mbps on air data rates. (Product Specification v1.0 Key Features)
 
 ```
 
@@ -305,7 +305,13 @@ it supports 250kbps, 1Mbps and 2Mbps on air data rates.
 • What is the relationship between channels and frequencies?
 
 ```
-The greater hierarchy is ISM Bands -> Channels -> Frequency shifting. For us the ISM band is 2.4GHz, the channel spread is 1 MHz across 126 channels (2.4GHz-2.525) and lastly the FSK happens within the channel range (2.4GHz-2.401GHz)
+The nRF24L01+ supports 126 RF channels (numbered 0–125)
+frequency (MHz) = 2400 + channel_number
+So:
+- channel 0  = 2400 MHz
+- channel 1  = 2401 MHz
+When you pick a channel, the radio transmits around that center frequency.
+
 ```
 
 7) Which modulation technique does the radio use?
@@ -325,7 +331,7 @@ It uses GFSK or Gaussian Ferquency Shift Keying. FSK is basically just using mul
 Page 8 and 14.
 Consumes 26μA in Standby-I mode, 320μA in Standby-II mode and 900nA in power down mode.
 
-Power down mode has all register values maintaines but the SPI powered on. That means its possible to change configs and upload/download data from. It allows the module to hover "half-awake" or "basically off" while still maintaining registers intact. Tradeoff is the slowest bootup time out of all 3 modes - 1.5ms
+Power down mode has all register values maintaines but the SPI powered on (Page 7). That means its possible to change configs and upload/download data from. It allows the module to hover "half-awake" or "basically off" while still maintaining registers intact. Tradeoff is the slowest bootup time out of all 3 modes - 1.5ms
 
 Standby-I is made to minimise average current consumption while maintaining short start up times. Besides everything that is active during "power down" (registers and SPI) the ocillator is also on during this mode. Usually used between packets when the radio is not transmitting or listening, or in low packet frequency communications. Slightly longer wake-up at 130μs
 
@@ -356,14 +362,14 @@ your own words.
 
 
 ```
-Enhanced ShockBurst is the nRF24L01+’s built-in packet-handling and reliability engine. It automatically formats and buffers packets, checks CRC on receive, and can acknowledge received packets and retransmit automatically if no ACK is received, so your microcontroller doesn’t have to implement these low-level link functions in software.
+Enhanced ShockBurst (7 Enhanced ShockBurst™ page 27) is the nRF24L01+’s built-in packet-handling and reliability engine. It automatically formats and buffers packets, checks CRC on receive and can acknowledge received packets and retransmit automatically if no ACK is received, so your microcontroller doesn’t have to implement these low-level link functions in software.
 ```
 
 12) On what layer in the ISO/OSI model does this operate?
 
 
 ```
-ShockBurst allows for automatic packet assembly and timing, automatic acknowledgement and retransmissions of packets. That would mean that it operates on the 2 OSI Level - Data Link, as it deals with handling the packet transmissions.
+ShockBurst allows for automatic packet assembly and timing, automatic acknowledgement and retransmissions of packets. That would mean that it operates on the second OSI Level - Data Link, as it deals with handling the packet transmissions.
 ```
 
 13) Look at the format of the radio packet (section 7.3 on page 28 of the datasheet) and describe
@@ -375,7 +381,7 @@ d. CRC
 
 
 ```
-a. Address – The receiver address used so the packet is detected and accepted by the correct receiver, avoiding accidental cross-talk with other nRF24L01+ systems.
+a. Address – The receiver address used so the packet is detected and accepted by the correct receiver avoiding accidental comunication with other nRF24L01+ systems.
 
 b. PID (Packet Identification) – A 2-bit identifier used to tell whether a received packet is new or a retransmission, so the PRX doesn’t deliver the same payload twice.
 
@@ -407,13 +413,15 @@ Then during the transfer we encounter a interfering frequency - not a payload by
 
 So all the checks described before will pass until we get to the CRC. Because of a flipped bit the CRC is mismatched now and the packet is discarded.
 
+(7.3 Enhanced Shockburst™ packet format Page 28 )
+ 
 ```
 15) What conditions define a good address (see section 7.3.2 of the datasheet)? Give an example
 of a good 5-byte address that adheres to these conditions. Write the address in hexadecimal
 and binary format.
 
 ```
-A “good” address is one that doesn’t look like noise or the preamble: avoid addresses where the bit level only shifts once and avoid addresses that are basically a continuation of the preamble’s hi–low toggling Example of a good 5-byte address: 0xE7D3F03577
+A “good” address is one that doesn’t look like noise or the preamble: avoid addresses where the bit level only shifts once and avoid addresses that are basically a continuation of the preamble’s hi–low toggling Example of a good 5-byte address: 0xE7D3F03577 , 11100111 11010011 11110000 00110101 01110111
 ```
 
 16) Give an example of a bad 5-byte address and explain why this is not a good address. Write
@@ -424,15 +432,16 @@ the address in hexadecimal and binary format.
 ```
 
 17) Add a table that describes the name and the function of every NRF24 pin. Include to which
-pin of the Arduino Uno header the NRF24 pin is connected
-
-
+pin of the Arduino Uno header the NRF24 pin is connected 
+```
+https://forum.arduino.cc/t/nrf24l01-and-uno-r3-tutorial/135381
+```
 | nRF24 pin| Function| Arduino Uno header pin (typical)|
 | -|- | -|
 | **GND** | Ground reference | **GND**|
 | **VCC** | Power input (**3.3V only**)| **3.3V**|
-| **CE**  | Chip Enable (controls RX/TX mode)| **D9** *(any free digital pin works)*|
-| **CSN (CS)** | SPI Chip Select (active LOW)| **D10** *(common choice)*|
+| **CE**  | Chip Enable (controls RX/TX mode)| **D9** |
+| **CSN (CS)** | SPI Chip Select (active LOW)| **D10**|
 | **SCK** | SPI clock| **D13** *(SCK)* |
 | **MOSI**| SPI Master Out → Slave In| **D11** *(MOSI)*|
 | **MISO**| SPI Master In ← Slave Out| **D12** *(MISO)*|
@@ -452,7 +461,7 @@ If all devices use the same address, every receiver will accept every packet and
 
 ```
 ART= Auto Retransmission;
-It is a function where the radio automatically re-sends a packet if it doesn’t receive an ACK from the receiver.It will retry up to a programmable limit, with a programmable delay between retries, and it stops early as soon as an ACK is received.
+It is a function where the radio automatically re-sends a packet if it doesn’t receive an ACK from the receiver. It will retry up to a programmable limit, with a programmable delay between retries, and it stops early as soon as an ACK is received. 
 
 ```
 
