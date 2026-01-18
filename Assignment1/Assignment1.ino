@@ -74,9 +74,10 @@ bool sendState(uint8_t newState) {
   return ok;
 }
 
-// update local state FIRST, then broadcast full state
+// broadcast the new LEDs state, sync when get an AWK
 void updateLocalAndBroadcast(int8_t delta) {
   int16_t next = (int16_t)ledCount + (int16_t)delta;
+
   if (next < 0)
     next = 0;
   if (next > NUM_LEDS)
@@ -98,7 +99,6 @@ void updateLocalAndBroadcast(int8_t delta) {
     applyLedCount();
   }
 }
-
 
 void handleButtonsAndSend() {
   unsigned long now = millis();

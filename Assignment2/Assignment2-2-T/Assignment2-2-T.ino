@@ -1,17 +1,3 @@
-/*
-  nRF24 Throughput Test (TX)
-
-  Sends 10,000 32-bit numbers (320,000 payload bits) to a matching RX and
-  measures total transfer time to compute achieved throughput. Data is sent in
-  32-byte packets (8 numbers). Reliability: RX returns an ACK payload with the
-  “next expected index”; TX resends a packet until it receives the expected ACK,
-  ensuring all numbers arrive in order.
-
-  Change per experiment: RF_RATE (250k/1M/2M), RF_CHANNEL, RF_PA, RETRY
-  settings. Requires RX sketch that supports ACK payloads and returns the next
-  expected index.
-*/
-
 #include <RF24.h>
 #include <SPI.h>
 
@@ -26,7 +12,7 @@ static const rf24_pa_dbm_e RF_PA = RF24_PA_LOW;     // MIN/LOW/HIGH/MAX
 static const uint8_t RETRY_DELAY = 5;               // 0..15 (steps of 250us)
 static const uint8_t RETRY_COUNT = 15;              // 0..15
 
-// ===== Address (must match RX) =====
+// ===== Address  =====
 const uint8_t ADDR[6] = "THR01";
 
 // ===== Test parameters =====

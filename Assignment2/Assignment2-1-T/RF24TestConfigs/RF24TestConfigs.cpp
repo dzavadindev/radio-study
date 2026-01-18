@@ -1,10 +1,5 @@
-
 #include "RF24TestConfigs.h"
 
-// Keep channel fixed as requested.
-// (In reality channel can matter due to Wi-Fi/interference, but we keep it
-// constant here.)
-// constant here.)
 static constexpr uint8_t CH_WIFI1 = 12;   // 2412 MHz (WiFi ch1 center)
 static constexpr uint8_t CH_WIFI6 = 37;   // 2437 MHz (WiFi ch6 center)
 static constexpr uint8_t CH_WIFI11 = 62;   // 2462 MHz (WiFi ch11 center)
@@ -13,11 +8,10 @@ static constexpr uint8_t CH_BLE_ADV1 = 2;    // 2402 MHz (BLE adv)
 static constexpr uint8_t CH_BLE_ADV2 = 26;   // 2426 MHz (BLE adv)
 static constexpr uint8_t CH_BLE_ADV3 = 80;   // 2480 MHz (BLE adv)
 
-static constexpr uint8_t CH_BOTH = 37;   // overlap-ish (WiFi ch6 area + BLE traffic around)
+static constexpr uint8_t CH_BOTH = 37;   // overlap (WiFi ch6 area + BLE traffic around)
 static constexpr uint8_t CH_NEITHER = 100;  // 2500 MHz (above WiFi/BLE common band)
-static constexpr uint8_t CH_RANDOM = 40;   // random mid band (your old fixed-ish)
+static constexpr uint8_t CH_RANDOM = 40;   // random mid band 
 
-// NOTE: target ~50 presets total
 static const RadioConfig PRESETS[] = {
     // --- Rate sweep (5 each) @ PA_LOW, CH_NEITHER ---
     {"250K PA_LOW CH_NEITHER ARD0 ARC1",  CH_NEITHER, RF24_250KBPS, RF24_PA_LOW, 0, 1},

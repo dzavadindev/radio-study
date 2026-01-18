@@ -13,7 +13,6 @@ static const uint8_t RETRY_COUNT = 15;
 static const rf24_pa_dbm_e RF_PA = RF24_PA_LOW;
 static const rf24_datarate_e RF_RATE = RF24_1MBPS; // RF24_250KBPS / RF24_1MBPS / RF24_2MBPS
 
-
 const uint8_t ADDR[6] = "THR01";
 
 static const uint32_t N = 10000;
@@ -21,17 +20,15 @@ uint32_t expected = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(2000);
 
   if (!radio.begin()) {
     Serial.println("RX: radio.begin() FAILED");
-    while (1) {
-    }
+    while (1) { }
   }
   if (!radio.isChipConnected()) {
     Serial.println("RX: nRF24 NOT connected (check wiring/power)");
-    while (1) {
-    }
+    while (1) { }
   }
 
   radio.setChannel(RF_CHANNEL);
@@ -65,8 +62,7 @@ void loop() {
     Serial.println(v);
     if (expected == N) {
       Serial.println("RX: received all 10,000 numbers.");
-      while (1) {
-      }
+      while (1) { }
     }
   }
 }

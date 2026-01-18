@@ -81,35 +81,13 @@ static void applyControlRadio() {
   delay(3);
 }
 
-static bool sendWithRetries(const void *p, uint8_t len, int tries,
-                            int delayMs) {
+static bool sendWithRetries(const void *p, uint8_t len, int tries, int delayMs) {
   for (int i = 0; i < tries; i++) {
     if (radio.write(p, len))
       return true;
     delay(delayMs);
   }
   return false;
-}
-
-
-
-
-
-static uint8_t rateCodeFromEnum(rf24_datarate_e r) {
-  if (r == RF24_250KBPS)
-    return 0;
-  if (r == RF24_1MBPS)
-    return 1;
-  return 2;
-}
-static uint8_t paCodeFromEnum(rf24_pa_dbm_e p) {
-  if (p == RF24_PA_MIN)
-    return 0;
-  if (p == RF24_PA_LOW)
-    return 1;
-  if (p == RF24_PA_HIGH)
-    return 2;
-  return 3;
 }
 
 static bool waitForRxControlReady(uint32_t timeoutMs) {
@@ -122,9 +100,9 @@ static bool waitForRxControlReady(uint32_t timeoutMs) {
   uint32_t t0 = millis();
   while (millis() - t0 < timeoutMs) {
     if (radio.write(probe, sizeof(probe))) {
-      // Serial.println("TX: RX back in CONTROL");
       return true;
     }
+
     delay(10);
   }
   Serial.println("TX: timeout waiting RX CONTROL");
@@ -146,8 +124,8 @@ static void runOneTest(size_t idx) {
   c.type = PKT_CONFIG;
   c.testId = testId;
   c.packets = N_PACKETS;
-  c.paCode = paCodeFromEnum(cfg.pa);
-  c.rateCode = rateCodeFromEnum(cfg.rate);
+  c.paCode = cfg.pa;
+  c.rateCode = cfg.rate;
   c.channel = cfg.channel;
   c.ard = cfg.ard;
   c.arc = cfg.arc;
@@ -158,7 +136,6 @@ static void runOneTest(size_t idx) {
     return;
   }
 
-
   rf24cfg_apply(radio, cfg);
   radio.openWritingPipe(DATA_ADDR);
 
@@ -166,12 +143,10 @@ static void runOneTest(size_t idx) {
   p.type = PKT_PING;
   p.testId = testId;
   p.magic = MAGIC;
-
  
   if (!sendWithRetries(&p, sizeof(p), 200, 10)) {
     return;
   }
-
 
   // 3) DATA
   uint32_t sent = 0, acked = 0, failed = 0, retriesSum = 0;
@@ -186,10 +161,12 @@ static void runOneTest(size_t idx) {
     sent++;
     bool ok = radio.write(&d, sizeof(d));
     retriesSum += radio.getARC();
+
     if (ok)
       acked++;
     else
       failed++;
+
     delay(INTERVAL_MS);
   }
 
@@ -203,18 +180,18 @@ static void runOneTest(size_t idx) {
   float per = (sent > 0) ? (float)failed / (float)sent : 0.0f;
   float avgRetries = (sent > 0) ? (float)retriesSum / (float)sent : 0.0f;
 
-  Serial.print(cfg.name);              Serial.print(",");
-  Serial.print(cfg.channel);           Serial.print(",");
-  Serial.print(rateCodeFromEnum(cfg.rate)); Serial.print(",");
-  Serial.print(paCodeFromEnum(cfg.pa));     Serial.print(",");
-  Serial.print(cfg.ard);               Serial.print(",");
-  Serial.print(cfg.arc);               Serial.print(",");
-  Serial.print(sent);                  Serial.print(",");
-  Serial.print(acked);                 Serial.print(",");
-  Serial.print(failed);                Serial.print(",");
-  Serial.print(per, 6);                Serial.print(",");
-  Serial.println(avgRetries, 3);
+  Serial.print(cfg.name);    Serial.print(",");
+  Serial.print(cfg.channel); Serial.print(",");
+  Serial.print(cfg.rate);    Serial.print(",");
+  Serial.print(cfg.pa);      Serial.print(",");
+  Serial.print(cfg.ard);     Serial.print(",");
+  Serial.print(cfg.arc);     Serial.print(",");
+  Serial.print(sent);        Serial.print(",");
+  Serial.print(acked);       Serial.print(",");
+  Serial.print(failed);      Serial.print(",");
+  Serial.print(per, 6);      Serial.print(",");
 
+  Serial.println(avgRetries, 3);
 
   // Let RX timeout back to CONTROL even if END got lost
   waitForRxControlReady(4000);
@@ -222,17 +199,16 @@ static void runOneTest(size_t idx) {
 
 void setup() {
   Serial.begin(115200);
-  delay(800);
+  delay(2000);
 
   if (!radio.begin()) {
     Serial.println("TX: begin FAILED");
-    while (1) {
-    }
+    while (1) { }
   }
+
   if (!radio.isChipConnected()) {
     Serial.println("TX: not connected");
-    while (1) {
-    }
+    while (1) { }
   }
 
   radio.setAddressWidth(5);
@@ -246,6 +222,7 @@ void setup() {
   radio.printDetails();
   
   Serial.println("label,ch,rate,pa,ard,arc,sent,acked,failed,per,avgRetries");
+
   for (size_t i = 0; i < rf24cfg_count(); i++) {
     runOneTest(i);
     delay(500);

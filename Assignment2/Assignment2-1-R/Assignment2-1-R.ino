@@ -1,17 +1,8 @@
-// ===============================
-// RX sketch (Receiver) with TIMEOUT fallback
-// - CONTROL mode listens on "CTL01" with fixed control settings
-// - On CONFIG -> switches to TEST mode on "DAT01"
-// - Counts DATA packets
-// - On END -> returns to CONTROL
-// - If END is missed: returns to CONTROL after TEST_TIMEOUT_MS with no valid packets
-// ===============================
-
 #include <Arduino.h>
 #include <RF24.h>
 #include <SPI.h>
 
-#define CE_PIN 7
+#define CE_PIN 9
 #define CSN_PIN 8
 #define MAGIC  0xC0FFEE42UL
 
@@ -20,7 +11,7 @@ RF24 radio(CE_PIN, CSN_PIN);
 static const uint8_t CTRL_ADDR[6] = "CTL01";
 static const uint8_t DATA_ADDR[6] = "DAT01";
 
-// Control mode fixed (MUST match TX control)
+// Control mode fixed 
 static const uint8_t         CONTROL_CHANNEL = 2;
 static const rf24_datarate_e CONTROL_RATE    = RF24_1MBPS;
 static const rf24_pa_dbm_e   CONTROL_PA      = RF24_PA_LOW;
@@ -69,25 +60,6 @@ static uint16_t expectedPackets = 0;
 static uint16_t gotPackets = 0;
 static uint32_t lastTestSeenMs = 0;
 
-// -------- mapping helpers --------
-static rf24_datarate_e rateFromCode(uint8_t code) {
-  switch (code) {
-    case 0: return RF24_250KBPS;
-    case 1: return RF24_1MBPS;
-    case 2: return RF24_2MBPS;
-    default: return RF24_1MBPS;
-  }
-}
-static rf24_pa_dbm_e paFromCode(uint8_t code) {
-  switch (code) {
-    case 0: return RF24_PA_MIN;
-    case 1: return RF24_PA_LOW;
-    case 2: return RF24_PA_HIGH;
-    case 3: return RF24_PA_MAX;
-    default: return RF24_PA_LOW;
-  }
-}
-
 static void applyRadio(uint8_t ch, rf24_datarate_e rate, rf24_pa_dbm_e pa, uint8_t ard, uint8_t arc) {
   radio.stopListening();
   radio.flush_rx();
@@ -117,7 +89,7 @@ static void enterTestFromCfg(const ConfigPkt& c) {
   gotPackets = 0;
   lastTestSeenMs = millis();
 
-  applyRadio(c.channel, rateFromCode(c.rateCode), paFromCode(c.paCode), c.ard, c.arc);
+  applyRadio(c.channel, c.rateCode, c.paCode, c.ard, c.arc);
   radio.openReadingPipe(1, DATA_ADDR);
 
   Serial.print("RX: TEST mode. testId=");

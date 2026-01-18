@@ -136,13 +136,16 @@ To do this, we have implemented a repeatable measurement setup using two STM32 N
 
 Wireless reliability of radios depends heavily on configuration and environment. For embedded use-cases that rely on the nRF24L01, it is important to understand how configuration choices affect delivery reliability. An incompatible combination of config to env will result in poor signal and high data loss.
 
-Research questions:
+Research question:
 
-* RQ1. How does data rate influence PER under the same physical conditions?
-* RQ2. How does transmit power (PA level) influence PER and retry behavior?
-* RQ3. How do ART settings (ARD, ARC) influence PER and the average number of retries?
-* RQ4. How does frequency channel influence PER (e.g., due to interference in the 2.4 GHz band)?
-* RQ5. Is there a configuration that provides the best tradeoff between reliability (low PER) and latency/throughput (low retries / lower delays)?
+* Is there a configuration that provides the best tradeoff between reliability (low PER) and latency/throughput (low retries / lower delays)?
+
+To answer it we will need to discover:
+
+* How does data rate influence PER under the same physical conditions?
+* How does transmit power (PA level) influence PER and retry behavior?
+* How do ART settings (ARD, ARC) influence PER and the average number of retries?
+* How does frequency channel influence PER (e.g., due to interference in the 2.4 GHz band)?
 
 #### Methodology
 
@@ -198,6 +201,8 @@ With a box between the radios, performance was generally closer to the normal cl
 ### Conclusion
 
 Across all three tests, the most reliable approach in this environment is using a clean channel, avoiding PA_HIGH, and using at least a modest retry budget (ARC ≥ 3) for 1 Mbps operation. Distance and obstacles mainly reduce margin, which makes the choice of channel and retry configuration more important, while excessive transmit power can be counterproductive.
+
+For a more elaborate breakdown of the results, see the attached PERTestResult.xlsx spreadsheet.
 
 ### Throughput (Part 2)
 
