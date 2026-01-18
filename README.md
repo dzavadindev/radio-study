@@ -462,16 +462,13 @@ TX sends values **0..9999** as individual 4-byte packets. It measures the total 
 
 #### `loop()`
 1. Records `startMs`
-2. Sends one extra “dummy” value first:
-   - `thing = 12345; radio.write(&thing, sizeof(thing));`
-   - (This is not included in the throughput bit count, but it does take time on-air.)
-3. For each `i` from 0 to 9999:
+2. For each `i` from 0 to 9999:
    - Keeps calling `radio.write(&i, sizeof(i))` until it returns `true` (ACK received)
-4. Records `endMs` and computes:
+3. Records `endMs` and computes:
    - `seconds = (endMs - startMs) / 1000`
    - `achieved_bps = TOTAL_BITS / seconds`
-5. Prints configured RF rate, time, achieved throughput (bps and kbps)
-6. Stops forever (`while (1) {}`)
+4. Prints configured RF rate, time, achieved throughput (bps and kbps)
+5. Stops forever (`while (1) {}`)
 ---
 
 # Questions answers
