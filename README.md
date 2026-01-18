@@ -142,7 +142,7 @@ Across all three tests, the most reliable approach in this environment is using 
 
 #### Introduction
 
-The goal of this work is to evaluate the reliability of an nRF24L01 radio link by measuring Packet Error Rate (PER) while systematically varying key PHY/MAC parameters:
+The goal of this work is to evaluate the reliability of an nRF24L01 radio link by measuring Packet Error Rate (PER) while systematically varying key physical parameters:
 
 * Transmit power (PA level)
 * Frequency channel
@@ -153,7 +153,7 @@ To do this, we have implemented a repeatable measurement setup using two STM32 N
 
 #### Problem statement
 
-Wireless reliability of radios depends heavily on configuration and environment. For embedded use-cases that rely on the nRF24L01, it is important to understand how configuration choices affect delivery reliability.
+Wireless reliability of radios depends heavily on configuration and environment. For embedded use-cases that rely on the nRF24L01, it is important to understand how configuration choices affect delivery reliability. An incompatible combination of config to env will result in poor signal and high data loss.
 
 Research questions:
 
@@ -173,9 +173,19 @@ This part is about testing link reliability under different possible configurati
 - Automatic Retry Count - the maximum amount of retries before giving up
 - Channel - the communication channel inside the band
 
-The main principle of work for the app is:
+We could be testing all ~390,000 possible combinations, but would not have been fun. So we have a baseline configuration we are going to modify to test for different configuration values. That default config is:
+
+- PA - Low
+- Datarate - 1Mbsp
+- ARD - 5
+- ARC - 5
+- Channel - 40
+
+From there, we are going to vary a single value inside of the config (e.g., check all 3 PA types, check multiple different channels, check all 3 datarates etc.) and record the PER results. During the experiments both the devices will stay within one meter of one another with a clear line of sight.
 
 #### Measurement procedure
+
+The main principle of work for the app is:
 
 - TX selects a config (PA, Rate, ARD, ARC and Channel).
 - Then it sends a packet containing that config information to the RX over the Control Channel (a channel and config combo that is static for both RX and TX).
@@ -184,15 +194,11 @@ The main principle of work for the app is:
 - After END has been received by RX, it switches back to Control Channel to listen for more configuration packets.
 - Repeat for a few different configurations
 
-We have selected a few configurations, because testing all ~390,000 variants would not have been fun. We have a baseline configuration we are going to modify to test for different configuration values. That default config is:
+Then to get our results we:
 
-- PA - Low
-- Datarate - 1Mbsp
-- ARD - 5
-- ARC - 5
-- Channel - 76
-
-From there, we are going to vary a single value inside of the config (e.g., check all 3 PA types, check multiple different channels, check all 3 datarates etc.) and record the PER results. During the experiments both the devices will stay within one meter of one another with a clear line of sight.
+- Start the RX for listening
+- Start the TX for transmitting
+- Every time TX completes a sweep it will also output a csv formatted results (sent, failed) to serial
 
 #### Results
 
@@ -207,10 +213,11 @@ The goal of this measurement is to determine the actual end-to-end throughput of
 Even if a radio is configured for a certain physical-layer data rate (e.g., 1 Mbps), the application throughput is often much lower due to protocol overhead, acknowledgements, waiting time, and retransmissions.
 
 **Research question:**  
-How does the configured RF data rate (250 kbps / 1 Mbps / 2 Mbps) affect the achieved application throughput when transmitting 10,000 32-bit values reliably?
+* How does the configured RF data rate (250 kbps / 1 Mbps / 2 Mbps) affect the achieved application throughput when transmitting 10,000 32-bit values reliably?
 
 ### Methodology 
-We measured application-level throughput by reliably transmitting a fixed dataset from a transmitter (TX) to a receiver (RX), while keeping the test conditions the same so the experiment can be reproduced.
+We will measure application-level throughput by reliably transmitting a fixed dataset from a transmitter (TX) to a receiver (RX), while keeping the test conditions the same so the experiment can be reproduced.
+
 - **Total payload:** 10,000 × 32 bits = 320,000 bits (40,000 bytes)  
 - **Timing window:** start when TX begins sending, stop when RX has received the final expected value  
 - **Throughput calculation:** `Throughput (bps) = 320,000 bits / time (s)`
@@ -253,13 +260,12 @@ The achieved throughput is much lower than the configured RF data rate in all te
 How does that compare to the output power of a 3G/4G/5G mobile phone?
 
 ```
-officialy the max out put is 0 dBm ≈ 1 m Bu the transmitor suports when looking at the data sheet +4dBm + 4 mW
-IT is alot lower than the output power of 3G 4G and 5G 
-WMax TX setting:  
-    - 3G = +24 dBm = 250 mW 
-    - 4G = +23 dBm = 200 mW
-    - 5G = +23 dBm = 200 mW
-
+Officialy the max out put is 0 dBm ≈ 1m, but the transmitor suports when looking at the data sheet +4dBm + 4 mW
+It is a lot lower than the output power of 3G, 4G and 5G 
+Max milliwats per TX setting:  
+- 3G = +24 dBm = 250 mW 
+- 4G = +23 dBm = 200 mW
+- 5G = +23 dBm = 200 mW
 ```
 
 2) What is a frequency band?
